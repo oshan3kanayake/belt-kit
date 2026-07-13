@@ -1,0 +1,73 @@
+import { Role } from "./auth-context";
+
+/**
+ * Central permission map — mirrors firestore.rules.
+ *
+ * Roles:
+ *   owner / manager  — everything
+ *   advisor          — "Front Desk": full CRUD on customers/vehicles/jobs,
+ *                      assign technicians, add members, invoices + payments
+ *   technician       — see assigned jobs, change status, add parts to them
+ *   accountant       — view jobs; invoices + payments
+ *   customer         — own records (portal, later)
+ */
+
+const READABLE: Record<Role, string[]> = {
+  owner: [
+    "jobCards", "jobCardLines", "customers", "vehicles",
+    "parts", "stockMovements", "invoices", "payments", "users",
+    "branches", "auditLog",
+  ],
+  manager: [
+    "jobCards", "jobCardLines", "customers", "vehicles",
+    "parts", "stockMovements", "invoices", "payments", "users",
+    "branches", "auditLog",
+  ],
+  advisor: [
+    "jobCards", "jobCardLines", "customers", "vehicles",
+    "parts", "stockMovements", "invoices", "payments", "users",
+    "branches", "auditLog",
+  ],
+  technician: ["jobCards", "jobCardLines", "parts", "branches"],
+  accountant: [
+    "jobCards", "jobCardLines", "customers", "vehicles",
+    "invoices", "payments", "branches", "auditLog",
+  ],
+  customer: ["invoices", "payments"],
+  pending: [],
+};
+
+export function canRead(role: Role | null, collection: string): boolean {
+  if (!role) return false;
+  return READABLE[role]?.includes(collection) ?? false;
+}
+
+// ---- Action helpers (mirror the write rules) ------------------------------
+
+// Ops = owner, manager, front-desk. Full CRUD on operational records.
+const isOps = (r: Role | null) =>
+  r === "owner" || r === "manager" || r === "advisor";
+
+export const canManageCustomers = isOps;
+export const canManageVehicles = isOps;
+export const canCreateJobs = isOps;
+export const canDeleteRecords = isOps; // customers/vehicles/jobs delete
+
+export const canEditJobLines = (r: Role | null) =>
+  isOps(r) || r === "technician";
+
+export const canChangeJobStatus = (r: Role | null) =>
+  isOps(r) || r === "technician";
+
+export const canManageInventory = (r: Role | null) =>
+  r === "owner" || r === "manager" || r === "advisor";
+
+// Financial actions: invoices + payments. Front-desk included per request.
+export const canDoFinancial = (r: Role | null) =>
+  r === "owner" || r === "manager" || r === "advisor" || r === "accountant";
+
+// Add staff members + assign roles: owner, manager, front-desk.
+export const canManageUsers = isOps;
+
+// Assign technicians to a job.
+export const canAssignTechnicians = isOps;

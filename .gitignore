@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Build output
+functions/lib/
+*.tsbuildinfo
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.log
+
+# Secrets & local config — NEVER commit these
+.env
+.env.local
+*serviceAccount*.json
+serviceAccountKey.json
+
+# OS
+.DS_Store
+Thumbs.db

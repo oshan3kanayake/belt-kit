@@ -1,0 +1,28 @@
+{
+  "name": "belt-kit-functions",
+  "version": "0.1.0",
+  "description": "Belt-Kit backend — Firebase Cloud Functions (Phase 1 MVP)",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions,firestore,auth,storage",
+    "shell": "npm run build && firebase functions:shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "seed": "node scripts/seed.mjs",
+    "seed:cloud": "node scripts/seed.mjs --cloud"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.1.1",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "private": true
+}

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: #f7f6f4;
+  color: #1c1a1b;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #dcd7d2;
+  border-radius: 999px;
+  border: 3px solid #f7f6f4;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c3bcb5;
+}
+
+@layer components {
+  .text-sheen {
+    background: linear-gradient(100deg, #b76e79, #c6a15b, #b76e79);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 4s linear infinite;
+  }
+
+  /* Buttons — flat, restrained, modern */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-burgundy-700 px-4 py-2.5 text-sm font-medium text-white transition-colors duration-200 hover:bg-burgundy-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink transition-colors duration-200 hover:bg-surface-muted hover:text-burgundy-700;
+  }
+
+  /* Cards — hairline border, no heavy shadow */
+  .card {
+    @apply rounded-xl border border-line bg-white transition-colors duration-200;
+  }
+
+  .input-luxe {
+    @apply w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-faint outline-none transition focus:border-burgundy-400 focus:ring-2 focus:ring-burgundy-100;
+  }
+
+  .label-luxe {
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
+  }
+
+  .table-luxe {
+    @apply w-full text-left text-sm;
+  }
+  .table-luxe thead th {
+    @apply border-b border-line px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint;
+  }
+  .table-luxe tbody tr {
+    @apply border-b border-line/70 transition-colors hover:bg-surface-muted/50;
+  }
+  .table-luxe tbody td {
+    @apply px-5 py-3.5;
+  }
+}

@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// ============================================================================
+// BELT-KIT — Cloud Storage Security Rules (Phase 1)
+// ----------------------------------------------------------------------------
+// Files (DVI photos, invoice PDFs, vehicle documents) live in Cloud Storage,
+// NOT in Firestore, exactly as the spec's architecture requires.
+//
+// Paths are namespaced by branch so files never leak across branches:
+//   /branches/{branchId}/jobCards/{jobCardId}/...
+//   /branches/{branchId}/vehicles/{vehicleId}/documents/...
+//   /branches/{branchId}/invoices/{invoiceId}.pdf
+// ============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function role() { return request.auth.token.role; }
+    function userBranch() { return request.auth.token.branchId; }
+    function isStaff() {
+      return signedIn() && role() in ['owner', 'manager', 'advisor', 'technician', 'accountant'];
+    }
+    function sameBranch(branchId) {
+      return role() == 'owner' || userBranch() == branchId;
+    }
+
+    // Anything under a branch: staff of that branch may read/write.
+    match /branches/{branchId}/{allPaths=**} {
+      allow read: if isStaff() && sameBranch(branchId);
+      // Limit uploads to 25MB to keep DVI videos/photos reasonable.
+      allow write: if isStaff() && sameBranch(branchId)
+                     && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // Deny everything else.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

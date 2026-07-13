@@ -1,0 +1,126 @@
+rules_version = '2';
+
+// ============================================================================
+// BELT-KIT — Firestore Security Rules (free-tier, lean get() usage)
+// ----------------------------------------------------------------------------
+// role/branch come from /users/{uid}. To avoid exceeding Firestore's per-request
+// get() limit (which was denying created-user technicians), we read the user
+// doc AT MOST ONCE per request via a single helper, and drop branch scoping
+// (single-branch system) so no rule needs the doc's branchId.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // Single source: the caller's /users doc data (one get per request path).
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    // Role ALWAYS from the /users doc so seeded (claim) and created (no claim)
+    // users take the IDENTICAL code path. Requires the /users doc to exist.
+    function myRole() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? me().role : null;
+    }
+
+    function isStaff() {
+      return myRole() in ['owner', 'manager', 'advisor', 'technician', 'accountant'];
+    }
+    function isOps() { return myRole() in ['owner', 'manager', 'advisor']; }
+    function isFinance() { return myRole() in ['owner', 'manager', 'advisor', 'accountant']; }
+    function onlyChanged(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ---- Users -----------------------------------------------------------
+    match /users/{userId} {
+      allow read: if signedIn();                 // any signed-in user may read
+      allow create, update: if isOps()
+                    || (request.auth.uid == userId
+                        && request.resource.data.role in ['owner', 'pending']);
+      allow delete: if myRole() in ['owner', 'manager'];
+    }
+
+    match /meta/{docId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && docId == 'bootstrap'
+                    && !exists(/databases/$(database)/documents/meta/bootstrap);
+      allow update, delete: if false;
+    }
+
+    // ---- Branches --------------------------------------------------------
+    match /branches/{branchId} {
+      allow read: if signedIn();
+      allow write: if myRole() in ['owner', 'manager'];
+    }
+
+    // ---- Customers -------------------------------------------------------
+    match /customers/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isOps();
+    }
+
+    // ---- Vehicles --------------------------------------------------------
+    match /vehicles/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isOps();
+    }
+
+    // ---- Job Cards -------------------------------------------------------
+    match /jobCards/{id} {
+      allow read: if isStaff();
+      allow create: if isOps();
+      allow update: if isOps()
+                    || (myRole() == 'technician'
+                        && onlyChanged(['status', 'updatedAt', 'updatedByUid']))
+                    || (myRole() == 'accountant'
+                        && onlyChanged(['invoiceId', 'subtotalMinor', 'taxMinor',
+                                        'totalMinor', 'updatedAt', 'updatedByUid']));
+      allow delete: if isOps();
+    }
+
+    // ---- Job card lines --------------------------------------------------
+    match /jobCardLines/{id} {
+      allow read: if isStaff();
+      allow create, update: if isOps() || myRole() == 'technician';
+      allow delete: if isOps();
+    }
+
+    // ---- Inventory -------------------------------------------------------
+    match /parts/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isOps();
+    }
+    match /stockMovements/{id} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if false;
+      allow delete: if isOps();
+    }
+
+    // ---- Billing ---------------------------------------------------------
+    match /invoices/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isFinance();
+    }
+    match /payments/{id} {
+      allow read: if isStaff();
+      allow create, delete: if isFinance();
+      allow update: if false;
+    }
+
+    // ---- Audit log -------------------------------------------------------
+    match /auditLog/{id} {
+      allow read: if isFinance();
+      allow create: if isFinance();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
