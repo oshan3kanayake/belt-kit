@@ -16,15 +16,18 @@ import {
   UserCog,
   LogOut,
   Loader2,
+  Search,
+  Command,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
+import { CommandBar } from "@/components/CommandBar";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles: Role[]; // which roles see this item
+  roles: Role[];
 };
 
 const NAV: NavItem[] = [
@@ -46,16 +49,13 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
 
-  // Auth guard — bounce to login if not signed in.
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [user, loading, router]);
 
-  // Self-register: a signed-in user with no /users doc gets a 'pending' record
-  // so an owner can assign their real role. Runs once role has resolved.
   useEffect(() => {
     if (!user || !roleResolved) return;
-    if (role) return; // already has a role/pending doc
+    if (role) return;
     (async () => {
       const ref = doc(db, "users", user.uid);
       const snap = await getDoc(ref);
@@ -80,7 +80,6 @@ export default function DashboardLayout({
     );
   }
 
-  // No role yet (pending) — show a friendly waiting screen instead of the app.
   if (!role || role === "pending" || role === "customer") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas px-6">
@@ -112,11 +111,11 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      {/* Sidebar */}
-      <aside className="hidden w-72 flex-col border-r border-line bg-surface/80 backdrop-blur-xl lg:flex">
-        <div className="flex items-center gap-3 px-6 py-7">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-burgundy-700">
-            <span className="font-serif text-lg font-semibold text-white">B</span>
+      <CommandBar />
+      <aside className="relative hidden w-72 flex-col border-r border-line bg-white lg:flex">
+        <div className="relative flex items-center gap-3 px-6 py-7">
+          <div className="icon-tile-gradient flex h-9 w-9 items-center justify-center rounded-lg">
+            <span className="text-base font-semibold text-white">B</span>
           </div>
           <div>
             <p className="text-[15px] font-semibold leading-none tracking-tight text-ink">
@@ -128,10 +127,27 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        <p className="px-7 pb-2 pt-3 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+        <div className="relative px-4 pb-3">
+          <button
+            onClick={() =>
+              window.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "k", metaKey: true })
+              )
+            }
+            className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface-muted/60 px-3 py-2.5 text-sm text-ink-faint transition-colors duration-150 hover:border-burgundy-200 hover:text-burgundy-600"
+          >
+            <Search size={15} />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="flex items-center gap-0.5 rounded border border-line bg-white px-1.5 py-0.5 text-[10px] font-medium">
+              <Command size={9} />K
+            </kbd>
+          </button>
+        </div>
+
+        <p className="relative px-7 pb-2 pt-1 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
           Menu
         </p>
-        <nav className="flex-1 space-y-1 px-4">
+        <nav className="relative flex-1 space-y-1.5 px-4">
           {visibleNav.map((item) => {
             const active =
               pathname === item.href ||
@@ -141,18 +157,18 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group relative flex items-center gap-3 rounded-xl px-4 py-2.5 font-sans text-sm font-medium transition-all duration-200 ${
+                className={`group relative flex items-center gap-3 rounded-lg px-4 py-2.5 font-sans text-sm font-medium transition-colors duration-150 ${
                   active
-                    ? "bg-burgundy-600 text-white shadow-luxe"
-                    : "text-ink-soft hover:bg-surface-muted hover:text-burgundy-600"
+                    ? "bg-burgundy-50 font-semibold text-burgundy-700"
+                    : "text-ink-soft hover:bg-surface-muted hover:text-ink"
                 }`}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-rosegold-300" />
+                  <span className="absolute -left-4 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-burgundy-600" />
                 )}
                 <Icon
                   size={18}
-                  className={active ? "text-rosegold-200" : "text-ink-faint group-hover:text-burgundy-500"}
+                  className={active ? "text-burgundy-600" : "text-ink-faint group-hover:text-ink-soft"}
                 />
                 {item.label}
               </Link>
@@ -160,10 +176,9 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        {/* User card */}
-        <div className="border-t border-line p-4">
-          <div className="flex items-center gap-3 rounded-xl bg-surface-muted px-4 py-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-rosegold-sheen text-sm font-semibold text-white">
+        <div className="relative border-t border-line p-4">
+          <div className="flex items-center gap-3 rounded-xl bg-surface-muted/70 px-4 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-burgundy-600 text-sm font-semibold text-white">
               {(user.displayName ?? user.email ?? "?")[0]?.toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -177,7 +192,7 @@ export default function DashboardLayout({
           </div>
           <button
             onClick={() => logout()}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-line px-4 py-2.5 font-sans text-sm text-ink-soft transition-all hover:border-burgundy-300 hover:text-burgundy-600"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2.5 font-sans text-sm text-ink-soft transition-colors duration-150 hover:border-burgundy-200 hover:text-burgundy-700"
           >
             <LogOut size={16} />
             Sign out
@@ -185,10 +200,8 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Main area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile topbar */}
-        <header className="flex items-center justify-between border-b border-line bg-surface/60 px-6 py-4 backdrop-blur lg:hidden">
+        <header className="flex items-center justify-between border-b border-line bg-white px-6 py-4 lg:hidden">
           <span className="text-[15px] font-semibold tracking-tight text-ink">
             Belt-Kit
           </span>

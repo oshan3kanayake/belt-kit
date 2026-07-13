@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ClipboardList,
@@ -28,14 +29,18 @@ import {
   PageHeader,
   Modal,
   Field,
-  CenterSpinner,
+  TableSkeleton,
   EmptyState,
   Badge,
+  DataTable,
+  Column,
+  FilterChips,
   useToast,
 } from "@/components/ui";
 
 export default function JobCardsPage() {
   const { branchId, role } = useAuth();
+  const router = useRouter();
   const { data: allJobs, loading, error } = useCollection<JobCard>("jobCards");
   // Technicians only SEE jobs assigned to them (client-side filter — no rules).
   const jobs =
@@ -49,6 +54,7 @@ export default function JobCardsPage() {
   const { notify } = useToast();
 
   const [view, setView] = useState<"board" | "list">("board");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState("");
@@ -79,6 +85,76 @@ export default function JobCardsPage() {
     jobs.forEach((j) => map[j.status]?.push(j));
     return map;
   }, [jobs]);
+
+  const listRows = useMemo(
+    () =>
+      statusFilter === "all"
+        ? jobs
+        : jobs.filter((j) => j.status === statusFilter),
+    [jobs, statusFilter]
+  );
+
+  const columns: Column<JobCard & { id: string }>[] = [
+    {
+      key: "complaint",
+      header: "Complaint",
+      sortValue: (j) => j.complaint?.toLowerCase() ?? "",
+      cell: (j) => (
+        <span className="font-medium text-ink group-hover:text-burgundy-600 line-clamp-1">
+          {j.complaint}
+        </span>
+      ),
+    },
+    {
+      key: "customer",
+      header: "Customer",
+      sortValue: (j) => customerName(j.customerId).toLowerCase(),
+      hideBelow: "sm",
+      cell: (j) => (
+        <span className="flex items-center gap-1.5 text-ink-soft">
+          <User size={13} className="text-ink-faint" /> {customerName(j.customerId)}
+        </span>
+      ),
+    },
+    {
+      key: "vehicle",
+      header: "Vehicle",
+      hideBelow: "lg",
+      cell: (j) => (
+        <span className="flex items-center gap-1.5 text-ink-soft">
+          <Car size={13} className="text-ink-faint" /> {vehicleLabel(j.vehicleId)}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (j) => JOB_STATUS_ORDER.indexOf(j.status),
+      cell: (j) => (
+        <Badge tone={JOB_STATUS_META[j.status].tone}>
+          {JOB_STATUS_META[j.status].label}
+        </Badge>
+      ),
+    },
+    {
+      key: "date",
+      header: "Opened",
+      sortValue: (j) => j.createdAt?.toMillis?.() ?? 0,
+      hideBelow: "md",
+      cell: (j) => (
+        <span className="text-xs text-ink-faint">{formatDate(j.createdAt)}</span>
+      ),
+    },
+    {
+      key: "total",
+      header: "Total",
+      align: "right",
+      sortValue: (j) => j.totalMinor,
+      cell: (j) => (
+        <span className="font-medium text-ink">{formatMoney(j.totalMinor)}</span>
+      ),
+    },
+  ];
 
   async function handleCreate(form: FormData) {
     if (!branchId) return;
@@ -158,8 +234,35 @@ export default function JobCardsPage() {
         </div>
       )}
 
+      {view === "list" && !loading && jobs.length > 0 && (
+        <div className="mb-5">
+          <FilterChips
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: "all", label: "All", count: jobs.length },
+              ...JOB_STATUS_ORDER.map((s) => ({
+                value: s,
+                label: JOB_STATUS_META[s].label,
+                count: byStatus[s].length,
+              })),
+            ]}
+          />
+        </div>
+      )}
+
       {loading ? (
-        <CenterSpinner label="Loading job cards…" />
+        view === "list" ? (
+          <TableSkeleton cols={6} />
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {JOB_STATUS_ORDER.map((s) => (
+              <div key={s} className="w-72 shrink-0 space-y-2">
+                <TableSkeleton cols={1} rows={3} />
+              </div>
+            ))}
+          </div>
+        )
       ) : jobs.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
@@ -229,50 +332,19 @@ export default function JobCardsPage() {
           ))}
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-left font-sans text-sm">
-            <thead className="bg-surface-muted text-xs uppercase tracking-wider text-ink-soft">
-              <tr>
-                <th className="px-5 py-3">Complaint</th>
-                <th className="px-5 py-3">Customer</th>
-                <th className="px-5 py-3">Vehicle</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {jobs.map((j) => (
-                <tr
-                  key={j.id}
-                  className="group cursor-pointer transition hover:bg-surface-muted/50"
-                >
-                  <td className="px-5 py-3">
-                    <Link
-                      href={`/dashboard/job-cards/${j.id}`}
-                      className="font-medium text-ink group-hover:text-burgundy-600"
-                    >
-                      {j.complaint}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 text-ink-soft">
-                    {customerName(j.customerId)}
-                  </td>
-                  <td className="px-5 py-3 text-ink-soft">
-                    {vehicleLabel(j.vehicleId)}
-                  </td>
-                  <td className="px-5 py-3">
-                    <Badge tone={JOB_STATUS_META[j.status].tone}>
-                      {JOB_STATUS_META[j.status].label}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-3 text-right font-medium text-ink">
-                    {formatMoney(j.totalMinor)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={listRows}
+          columns={columns}
+          initialSort={{ key: "date", dir: "desc" }}
+          onRowClick={(j) => router.push(`/dashboard/job-cards/${j.id}`)}
+          emptyState={
+            <EmptyState
+              icon={ClipboardList}
+              title="No matching job cards"
+              hint="Try a different status filter."
+            />
+          }
+        />
       )}
 
       <Modal

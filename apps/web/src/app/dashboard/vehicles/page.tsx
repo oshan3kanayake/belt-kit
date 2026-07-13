@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Car, Plus, Search, ChevronRight, Trash2 } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Car, Plus, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCollection } from "@/lib/useCollection";
 import { createDoc, updateDocById, deleteDocById } from "@/lib/db-write";
@@ -14,13 +12,18 @@ import {
   Modal,
   Field,
   CenterSpinner,
+  TableSkeleton,
   EmptyState,
   ConfirmDialog,
+  DataTable,
+  Column,
+  SearchInput,
   useToast,
 } from "@/components/ui";
 
 function VehiclesInner() {
   const { branchId, role } = useAuth();
+  const router = useRouter();
   const params = useSearchParams();
   const preselectCustomer = params.get("customer");
 
@@ -67,6 +70,52 @@ function VehiclesInner() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicles, search, customers]);
+
+  const columns: Column<Vehicle & { id: string }>[] = [
+    {
+      key: "vehicle",
+      header: "Vehicle",
+      sortValue: (v) => `${v.make} ${v.model}`.toLowerCase(),
+      cell: (v) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-burgundy-500">
+            <Car size={17} />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-ink group-hover:text-burgundy-600">
+              {v.make} {v.model}
+            </p>
+            {v.year && <p className="text-xs text-ink-faint">{v.year}</p>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "plate",
+      header: "Plate",
+      sortValue: (v) => v.plateNumber ?? "",
+      cell: (v) => (
+        <span className="inline-block rounded-md bg-burgundy-deep px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-white">
+          {v.plateNumber}
+        </span>
+      ),
+    },
+    {
+      key: "owner",
+      header: "Owner",
+      sortValue: (v) => customerName(v.customerId).toLowerCase(),
+      hideBelow: "sm",
+      cell: (v) => <span className="text-ink-soft">{customerName(v.customerId)}</span>,
+    },
+    {
+      key: "vin",
+      header: "VIN",
+      hideBelow: "lg",
+      cell: (v) => (
+        <span className="text-xs text-ink-faint">{v.vin || "—"}</span>
+      ),
+    },
+  ];
 
   async function handleSave(form: FormData) {
     if (!branchId) return;
@@ -122,16 +171,12 @@ function VehiclesInner() {
         }
       />
 
-      <div className="relative mb-6 max-w-md">
-        <Search
-          size={18}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
-        />
-        <input
+      <div className="mb-5">
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search plate, make, model or owner…"
-          className="input-luxe pl-11"
+          className="w-full sm:max-w-md"
         />
       </div>
 
@@ -142,74 +187,52 @@ function VehiclesInner() {
       )}
 
       {loading ? (
-        <CenterSpinner label="Loading vehicles…" />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Car}
-          title={search ? "No matches" : "No vehicles yet"}
-          hint={
-            search ? "Try another search." : "Add a vehicle and link it to a customer."
-          }
-        />
+        <TableSkeleton cols={4} />
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((v, i) => (
-            <motion.div
-              key={v.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: Math.min(i * 0.04, 0.4) }}
-              className="card group p-5 transition-shadow hover:shadow-luxe"
-            >
-              <div className="mb-3 flex items-start justify-between">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-muted text-burgundy-500">
-                  <Car size={20} />
-                </div>
-                <span className="rounded-lg bg-burgundy-deep px-2.5 py-1 font-sans text-xs font-semibold uppercase tracking-wider text-white">
-                  {v.plateNumber}
-                </span>
-              </div>
-              <p className="font-serif text-lg font-semibold text-ink">
-                {v.make} {v.model}
-              </p>
-              <p className="font-sans text-sm text-ink-soft">
-                {v.year ? `${v.year} · ` : ""}
-                {customerName(v.customerId)}
-              </p>
-              <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-                {canEdit ? (
-                  <div className="flex items-center gap-2">
+        <DataTable
+          rows={filtered}
+          columns={columns}
+          initialSort={{ key: "vehicle", dir: "asc" }}
+          onRowClick={(v) => router.push(`/dashboard/vehicles/${v.id}`)}
+          rowActions={
+            canEdit
+              ? (v) => (
+                  <>
                     <button
                       onClick={() => {
                         setEditing(v);
                         setModalOpen(true);
                       }}
-                      className="font-sans text-xs text-ink-soft transition hover:text-burgundy-600"
+                      className="rounded-lg p-2 text-ink-faint transition hover:bg-surface-muted hover:text-burgundy-600"
+                      aria-label="Edit"
+                      title="Edit"
                     >
-                      Edit
+                      <Pencil size={15} />
                     </button>
                     <button
                       onClick={() => setDeleteId(v.id)}
-                      className="text-ink-faint transition hover:text-burgundy-600"
+                      className="rounded-lg p-2 text-ink-faint transition hover:bg-surface-muted hover:text-burgundy-600"
                       aria-label="Delete"
                       title="Delete"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={15} />
                     </button>
-                  </div>
-                ) : (
-                  <span />
-                )}
-                <Link
-                  href={`/dashboard/vehicles/${v.id}`}
-                  className="flex items-center gap-1 font-sans text-xs text-burgundy-600 hover:text-burgundy-700"
-                >
-                  History <ChevronRight size={14} />
-                </Link>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                  </>
+                )
+              : undefined
+          }
+          emptyState={
+            <EmptyState
+              icon={Car}
+              title={search ? "No matches" : "No vehicles yet"}
+              hint={
+                search
+                  ? "Try another search."
+                  : "Add a vehicle and link it to a customer."
+              }
+            />
+          }
+        />
       )}
 
       <Modal

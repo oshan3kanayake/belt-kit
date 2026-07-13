@@ -1,70 +1,79 @@
 import type { Config } from "tailwindcss";
 
 /**
- * BELT-KIT luxury theme — Burgundy & Rose Gold on blush-ivory.
- * Light backgrounds only (per requirement). Deep wine burgundy as the
- * primary, warm rose-gold as the metallic accent, on soft ivory canvases.
+ * BELT-KIT — "Enterprise Clean" theme.
+ * Professional SaaS look: white surfaces, slate neutrals, a single
+ * restrained blue accent, subtle borders and shadows.
+ * The historic token NAMES (burgundy, rosegold, ink, line, canvas, surface)
+ * are preserved and remapped, so every existing utility class flips to the
+ * new look without renaming anything across the app.
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // Backgrounds — light, neutral, professional
-        canvas: "#F7F6F4", // soft warm-gray page background
-        surface: "#FFFFFF", // card surface
-        "surface-muted": "#F1EFEC", // subtle panel / hover
-
-        // Burgundy (primary) scale
+        canvas: "#F7F8FA",
+        surface: "#FFFFFF",
+        "surface-muted": "#F2F4F7",
         burgundy: {
-          50: "#FBEEF1",
-          100: "#F3D3DB",
-          200: "#E3A7B7",
-          300: "#CE7189",
-          400: "#A8455F",
-          500: "#822742", // core
-          600: "#6E1E3A",
-          700: "#57162D",
-          800: "#3F0F21",
-          900: "#2A0A16",
+          50: "#EFF6FF",
+          100: "#DBEAFE",
+          200: "#BFDBFE",
+          300: "#93C5FD",
+          400: "#60A5FA",
+          500: "#3B82F6",
+          600: "#2563EB",
+          700: "#1D4ED8",
+          800: "#1E40AF",
+          900: "#1E3A8A",
+          deep: "#172554",
         },
-
-        // Rose gold (metallic accent) scale
         rosegold: {
-          50: "#FBF1EF",
-          100: "#F6E0DB",
-          200: "#EDC3BB",
-          300: "#E0A398",
-          400: "#CF8577",
-          500: "#B76E79", // core rose gold
-          600: "#9E5A64",
-          700: "#7E4650",
-          800: "#5D343B",
-          900: "#3E2327",
+          50: "#F0F9FF",
+          100: "#E0F2FE",
+          200: "#BAE6FD",
+          300: "#7DD3FC",
+          400: "#38BDF8",
+          500: "#0EA5E9",
+          600: "#0284C7",
+          700: "#0369A1",
+          800: "#075985",
+          900: "#0C4A6E",
         },
-
-        // Neutral ink for text
         ink: {
-          DEFAULT: "#1C1A1B",
-          soft: "#5C5559",
-          faint: "#938C8F",
+          DEFAULT: "#111827",
+          soft: "#4B5563",
+          faint: "#9CA3AF",
         },
-        line: "#E7E3DF", // neutral hairline borders
+        line: "#E5E7EB",
+        viz: {
+          indigo: "#2563EB",
+          teal: "#0891B2",
+          violet: "#7C3AED",
+          sky: "#38BDF8",
+          amber: "#F59E0B",
+          rose: "#E11D48",
+          emerald: "#059669",
+          slate: "#64748B",
+        },
       },
       fontFamily: {
-        serif: ["var(--font-cormorant)", "Georgia", "serif"],
+        serif: ["var(--font-jost)", "system-ui", "sans-serif"],
         sans: ["var(--font-jost)", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        luxe: "0 10px 40px -12px rgba(110, 30, 58, 0.18)",
-        "luxe-lg": "0 24px 60px -16px rgba(110, 30, 58, 0.24)",
-        soft: "0 2px 12px -4px rgba(43, 34, 38, 0.10)",
+        soft: "0 1px 2px 0 rgba(17, 24, 39, 0.05)",
+        luxe: "0 4px 12px -2px rgba(17, 24, 39, 0.08), 0 2px 4px -2px rgba(17, 24, 39, 0.04)",
+        "luxe-lg": "0 20px 40px -12px rgba(17, 24, 39, 0.15)",
+        glow: "0 0 0 3px rgba(37, 99, 235, 0.12)",
+        "brutal-sm": "0 1px 2px 0 rgba(17, 24, 39, 0.05)",
+        "brutal-lime": "0 4px 12px -2px rgba(17, 24, 39, 0.08)",
+        "brutal-cyan": "0 4px 12px -2px rgba(17, 24, 39, 0.08)",
       },
       backgroundImage: {
-        "rosegold-sheen":
-          "linear-gradient(135deg, #B76E79 0%, #E0A398 45%, #C6A15B 100%)",
-        "burgundy-deep":
-          "linear-gradient(150deg, #6E1E3A 0%, #57162D 60%, #3F0F21 100%)",
+        "rosegold-sheen": "linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%)",
+        "burgundy-deep": "linear-gradient(150deg, #1D4ED8 0%, #172554 100%)",
       },
       keyframes: {
         "fade-up": {
@@ -77,7 +86,7 @@ const config: Config = {
         },
       },
       animation: {
-        "fade-up": "fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "fade-up": "fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
         shimmer: "shimmer 3s linear infinite",
       },
     },

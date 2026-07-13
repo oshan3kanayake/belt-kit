@@ -3,9 +3,8 @@
 import { useState, useMemo } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { Users, Plus, Search, Phone, Mail, ChevronRight, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Users, Plus, Phone, Mail, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCollection } from "@/lib/useCollection";
 import { createDoc, updateDocById, deleteDocById } from "@/lib/db-write";
@@ -15,10 +14,14 @@ import {
   PageHeader,
   Modal,
   Field,
-  CenterSpinner,
+  TableSkeleton,
   EmptyState,
   Badge,
   ConfirmDialog,
+  DataTable,
+  Column,
+  FilterChips,
+  SearchInput,
   useToast,
 } from "@/components/ui";
 
@@ -27,10 +30,12 @@ const SEGMENTS = ["walkin", "vip", "fleet"] as const;
 
 export default function CustomersPage() {
   const { branchId, role } = useAuth();
+  const router = useRouter();
   const { data: customers, loading, error } = useCollection<Customer>("customers");
   const { notify } = useToast();
 
   const [search, setSearch] = useState("");
+  const [segment, setSegment] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<(Customer & { id: string }) | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,14 +62,77 @@ export default function CustomersPage() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return customers;
-    return customers.filter(
-      (c) =>
-        c.displayName?.toLowerCase().includes(q) ||
-        c.phone?.includes(q) ||
-        c.email?.toLowerCase().includes(q)
-    );
-  }, [customers, search]);
+    let rows = customers;
+    if (segment !== "all")
+      rows = rows.filter((c) => (c.segment ?? "walkin") === segment);
+    if (q)
+      rows = rows.filter(
+        (c) =>
+          c.displayName?.toLowerCase().includes(q) ||
+          c.phone?.includes(q) ||
+          c.email?.toLowerCase().includes(q)
+      );
+    return rows;
+  }, [customers, search, segment]);
+
+  const segmentCounts = useMemo(() => {
+    const c = { all: customers.length, walkin: 0, vip: 0, fleet: 0 };
+    customers.forEach((x) => {
+      const s = (x.segment ?? "walkin") as "walkin" | "vip" | "fleet";
+      if (s in c) c[s]++;
+    });
+    return c;
+  }, [customers]);
+
+  const columns: Column<Customer & { id: string }>[] = [
+    {
+      key: "name",
+      header: "Customer",
+      sortValue: (c) => c.displayName?.toLowerCase() ?? "",
+      cell: (c) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rosegold-sheen text-xs font-semibold text-white">
+            {initials(c.displayName)}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-ink group-hover:text-burgundy-600">
+              {c.displayName}
+            </p>
+            {c.email && (
+              <p className="flex items-center gap-1 truncate text-xs text-ink-faint">
+                <Mail size={11} /> {c.email}
+              </p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "phone",
+      header: "Phone",
+      sortValue: (c) => c.phone ?? "",
+      hideBelow: "sm",
+      cell: (c) => (
+        <span className="flex items-center gap-1.5 text-ink-soft">
+          <Phone size={13} className="text-ink-faint" /> {c.phone}
+        </span>
+      ),
+    },
+    {
+      key: "segment",
+      header: "Segment",
+      sortValue: (c) => c.segment ?? "walkin",
+      hideBelow: "md",
+      cell: (c) => {
+        const s = c.segment ?? "walkin";
+        return s === "walkin" ? (
+          <span className="text-xs text-ink-faint">Walk-in</span>
+        ) : (
+          <Badge tone={s === "vip" ? "gold" : "blue"}>{s.toUpperCase()}</Badge>
+        );
+      },
+    },
+  ];
 
   function openNew() {
     setEditing(null);
@@ -121,16 +189,22 @@ export default function CustomersPage() {
         }
       />
 
-      <div className="relative mb-6 max-w-md">
-        <Search
-          size={18}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <FilterChips
+          value={segment}
+          onChange={setSegment}
+          options={[
+            { value: "all", label: "All", count: segmentCounts.all },
+            { value: "walkin", label: "Walk-in", count: segmentCounts.walkin },
+            { value: "vip", label: "VIP", count: segmentCounts.vip },
+            { value: "fleet", label: "Fleet", count: segmentCounts.fleet },
+          ]}
         />
-        <input
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search name, phone or email…"
-          className="input-luxe pl-11"
+          className="w-full sm:max-w-xs"
         />
       </div>
 
@@ -141,68 +215,24 @@ export default function CustomersPage() {
       )}
 
       {loading ? (
-        <CenterSpinner label="Loading customers…" />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={search ? "No matches" : "No customers yet"}
-          hint={
-            search
-              ? "Try a different search term."
-              : "Add your first customer to start building service history."
-          }
-          action={
-            canEdit &&
-            !search && (
-              <button onClick={openNew} className="btn-primary">
-                <Plus size={18} /> New Customer
-              </button>
-            )
-          }
-        />
+        <TableSkeleton cols={3} />
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {filtered.map((c, i) => (
-            <motion.div
-              key={c.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: Math.min(i * 0.04, 0.4) }}
-              className="card group flex items-center gap-4 p-4 transition-shadow hover:shadow-luxe"
-            >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-rosegold-sheen font-sans text-sm font-semibold text-white">
-                {initials(c.displayName)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate font-sans font-medium text-ink">
-                    {c.displayName}
-                  </p>
-                  {c.segment && c.segment !== "walkin" && (
-                    <Badge tone={c.segment === "vip" ? "gold" : "blue"}>
-                      {c.segment.toUpperCase()}
-                    </Badge>
-                  )}
-                </div>
-                <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-0.5 font-sans text-xs text-ink-soft">
-                  <span className="flex items-center gap-1">
-                    <Phone size={12} /> {c.phone}
-                  </span>
-                  {c.email && (
-                    <span className="flex items-center gap-1">
-                      <Mail size={12} /> {c.email}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                {canEdit && (
+        <DataTable
+          rows={filtered}
+          columns={columns}
+          initialSort={{ key: "name", dir: "asc" }}
+          onRowClick={(c) => router.push(`/dashboard/customers/${c.id}`)}
+          rowActions={
+            canEdit
+              ? (c) => (
                   <>
                     <button
                       onClick={() => openEdit(c)}
-                      className="rounded-lg px-2.5 py-1.5 font-sans text-xs text-ink-soft transition hover:bg-surface-muted hover:text-burgundy-600"
+                      className="rounded-lg p-2 text-ink-faint transition hover:bg-surface-muted hover:text-burgundy-600"
+                      aria-label="Edit"
+                      title="Edit"
                     >
-                      Edit
+                      <Pencil size={15} />
                     </button>
                     <button
                       onClick={() => setDeleteId(c.id)}
@@ -210,21 +240,33 @@ export default function CustomersPage() {
                       aria-label="Delete"
                       title="Delete"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={15} />
                     </button>
                   </>
-                )}
-                <Link
-                  href={`/dashboard/customers/${c.id}`}
-                  className="rounded-lg p-2 text-ink-faint transition hover:bg-surface-muted hover:text-burgundy-600"
-                  aria-label="View"
-                >
-                  <ChevronRight size={18} />
-                </Link>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                )
+              : undefined
+          }
+          emptyState={
+            <EmptyState
+              icon={Users}
+              title={search || segment !== "all" ? "No matches" : "No customers yet"}
+              hint={
+                search || segment !== "all"
+                  ? "Try a different search or filter."
+                  : "Add your first customer to start building service history."
+              }
+              action={
+                canEdit &&
+                !search &&
+                segment === "all" && (
+                  <button onClick={openNew} className="btn-primary">
+                    <Plus size={18} /> New Customer
+                  </button>
+                )
+              }
+            />
+          }
+        />
       )}
 
       <Modal

@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import { Receipt, Search, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Receipt, FileText, TrendingUp, Wallet } from "lucide-react";
 import { useCollection } from "@/lib/useCollection";
 import { Invoice, Customer, InvoiceStatus } from "@/lib/models";
 import { formatMoney, formatDate } from "@/lib/format";
-import { PageHeader, CenterSpinner, EmptyState, Badge } from "@/components/ui";
+import {
+  PageHeader,
+  TableSkeleton,
+  EmptyState,
+  Badge,
+  DataTable,
+  Column,
+  FilterChips,
+  SearchInput,
+} from "@/components/ui";
+import { AreaTrend, StatCard, VIZ } from "@/components/charts";
 
 const STATUS_TONE: Record<
   InvoiceStatus,
@@ -28,20 +37,26 @@ const STATUS_LABEL: Record<InvoiceStatus, string> = {
 };
 
 export default function BillingPage() {
+  const router = useRouter();
   const { data: invoices, loading, error } = useCollection<Invoice>("invoices");
   const { data: customers } = useCollection<Customer>("customers");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const customerName = (id: string) =>
     customers.find((c) => c.id === id)?.displayName ?? "—";
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const rows = q
-      ? invoices.filter((inv) =>
-          customerName(inv.customerId).toLowerCase().includes(q)
-        )
-      : invoices;
+    let rows = invoices;
+    if (statusFilter === "unpaid")
+      rows = rows.filter((i) => i.status !== "paid" && i.status !== "void");
+    else if (statusFilter !== "all")
+      rows = rows.filter((i) => i.status === statusFilter);
+    if (q)
+      rows = rows.filter((inv) =>
+        customerName(inv.customerId).toLowerCase().includes(q)
+      );
     return rows
       .slice()
       .sort(
@@ -49,54 +64,156 @@ export default function BillingPage() {
           (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoices, search, customers]);
+  }, [invoices, search, statusFilter, customers]);
 
   const outstanding = invoices
     .filter((i) => i.status !== "paid" && i.status !== "void")
     .reduce((s, i) => s + (i.totalMinor - i.amountPaidMinor), 0);
   const collectedMTD = invoices.reduce((s, i) => s + i.amountPaidMinor, 0);
+  const unpaidCount = invoices.filter(
+    (i) => i.status !== "paid" && i.status !== "void"
+  ).length;
+  const paidCount = invoices.filter((i) => i.status === "paid").length;
+
+  const revenueSeries = useMemo(() => {
+    const days: { key: string; label: string; value: number }[] = [];
+    const now = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      days.push({
+        key: d.toISOString().slice(0, 10),
+        label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        value: 0,
+      });
+    }
+    const idx = new Map(days.map((d, i) => [d.key, i]));
+    invoices.forEach((inv) => {
+      const t = inv.createdAt?.toDate?.();
+      if (!t) return;
+      const k = t.toISOString().slice(0, 10);
+      if (idx.has(k)) days[idx.get(k)!].value += inv.amountPaidMinor / 100;
+    });
+    return days;
+  }, [invoices]);
+
+  const columns: Column<Invoice & { id: string }>[] = [
+    {
+      key: "customer",
+      header: "Customer",
+      sortValue: (inv) => customerName(inv.customerId).toLowerCase(),
+      cell: (inv) => (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-burgundy-500">
+            <Receipt size={16} />
+          </div>
+          <div>
+            <p className="font-medium text-ink group-hover:text-burgundy-600">
+              {customerName(inv.customerId)}
+            </p>
+            <p className="text-xs text-ink-faint">{inv.lines.length} lines</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "date",
+      header: "Date",
+      sortValue: (inv) => inv.createdAt?.toMillis?.() ?? 0,
+      hideBelow: "sm",
+      cell: (inv) => (
+        <span className="text-xs text-ink-faint">{formatDate(inv.createdAt)}</span>
+      ),
+    },
+    {
+      key: "due",
+      header: "Due",
+      align: "right",
+      sortValue: (inv) => inv.totalMinor - inv.amountPaidMinor,
+      hideBelow: "md",
+      cell: (inv) => {
+        const due = inv.totalMinor - inv.amountPaidMinor;
+        return due > 0 ? (
+          <span className="text-burgundy-500">{formatMoney(due)}</span>
+        ) : (
+          <span className="text-ink-faint">—</span>
+        );
+      },
+    },
+    {
+      key: "total",
+      header: "Total",
+      align: "right",
+      sortValue: (inv) => inv.totalMinor,
+      cell: (inv) => (
+        <span className="font-semibold text-ink">{formatMoney(inv.totalMinor)}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      align: "right",
+      sortValue: (inv) => inv.status,
+      cell: (inv) => (
+        <Badge tone={STATUS_TONE[inv.status]}>{STATUS_LABEL[inv.status]}</Badge>
+      ),
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader eyebrow="Finance" title="Billing" icon={Receipt} />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="card p-5">
-          <p className="font-sans text-xs uppercase tracking-wide text-ink-faint">
-            Invoices
-          </p>
-          <p className="mt-1 font-serif text-2xl font-semibold text-ink">
-            {invoices.length}
-          </p>
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="card p-6 lg:col-span-2">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-ink">Revenue collected</h2>
+            <p className="text-xs text-ink-faint">Last 14 days</p>
+          </div>
+          <AreaTrend
+            data={revenueSeries}
+            color={VIZ.indigo}
+            height={200}
+            formatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
+          />
         </div>
-        <div className="card p-5">
-          <p className="font-sans text-xs uppercase tracking-wide text-ink-faint">
-            Outstanding
-          </p>
-          <p className="mt-1 font-serif text-2xl font-semibold text-burgundy-600">
-            {formatMoney(outstanding)}
-          </p>
-        </div>
-        <div className="card p-5">
-          <p className="font-sans text-xs uppercase tracking-wide text-ink-faint">
-            Collected
-          </p>
-          <p className="mt-1 font-serif text-2xl font-semibold text-emerald-600">
-            {formatMoney(collectedMTD)}
-          </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1">
+          <StatCard
+            label="Invoices"
+            value={String(invoices.length)}
+            icon={<FileText size={16} />}
+            accent={VIZ.slate}
+          />
+          <StatCard
+            label="Outstanding"
+            value={formatMoney(outstanding)}
+            icon={<TrendingUp size={16} />}
+            accent={VIZ.amber}
+          />
+          <StatCard
+            label="Collected"
+            value={formatMoney(collectedMTD)}
+            icon={<Wallet size={16} />}
+            accent={VIZ.emerald}
+          />
         </div>
       </div>
 
-      <div className="relative mb-6 max-w-md">
-        <Search
-          size={18}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <FilterChips
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "all", label: "All", count: invoices.length },
+            { value: "unpaid", label: "Outstanding", count: unpaidCount },
+            { value: "paid", label: "Paid", count: paidCount },
+          ]}
         />
-        <input
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search by customer…"
-          className="input-luxe pl-11"
+          className="w-full sm:max-w-xs"
         />
       </div>
 
@@ -107,66 +224,24 @@ export default function BillingPage() {
       )}
 
       {loading ? (
-        <CenterSpinner label="Loading invoices…" />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Receipt}
-          title={search ? "No matches" : "No invoices yet"}
-          hint={
-            search
-              ? "Try another search."
-              : "Invoices appear here once you generate them from a job card."
+        <TableSkeleton cols={5} />
+      ) : (
+        <DataTable
+          rows={filtered}
+          columns={columns}
+          onRowClick={(inv) => router.push(`/dashboard/billing/${inv.id}`)}
+          emptyState={
+            <EmptyState
+              icon={Receipt}
+              title={search || statusFilter !== "all" ? "No matches" : "No invoices yet"}
+              hint={
+                search || statusFilter !== "all"
+                  ? "Try another search or filter."
+                  : "Invoices appear here once you generate them from a job card."
+              }
+            />
           }
         />
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((inv, i) => {
-            const due = inv.totalMinor - inv.amountPaidMinor;
-            return (
-              <motion.div
-                key={inv.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i * 0.03, 0.3) }}
-              >
-                <Link
-                  href={`/dashboard/billing/${inv.id}`}
-                  className="card flex items-center justify-between gap-4 p-4 transition-shadow hover:shadow-luxe"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-muted text-burgundy-500">
-                      <Receipt size={18} />
-                    </div>
-                    <div>
-                      <p className="font-sans font-medium text-ink">
-                        {customerName(inv.customerId)}
-                      </p>
-                      <p className="font-sans text-xs text-ink-faint">
-                        {formatDate(inv.createdAt)} · {inv.lines.length} lines
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-sans font-semibold text-ink">
-                        {formatMoney(inv.totalMinor)}
-                      </p>
-                      {due > 0 && (
-                        <p className="font-sans text-xs text-burgundy-500">
-                          {formatMoney(due)} due
-                        </p>
-                      )}
-                    </div>
-                    <Badge tone={STATUS_TONE[inv.status]}>
-                      {STATUS_LABEL[inv.status]}
-                    </Badge>
-                    <ChevronRight size={18} className="text-ink-faint" />
-                  </div>
-                </Link>
-              </motion.div>
-            );
-          })}
-        </div>
       )}
     </div>
   );
