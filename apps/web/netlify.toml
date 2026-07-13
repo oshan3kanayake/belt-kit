@@ -1,0 +1,11 @@
+# Netlify config for the Belt-Kit web app.
+# In the Netlify UI, set the site's "Base directory" to: apps/web
+# (this file then applies relative to that base).
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Official Next.js runtime — handles App Router, SSR, and API routes.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
