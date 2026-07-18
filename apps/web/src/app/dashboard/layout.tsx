@@ -23,6 +23,7 @@ import {
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
 import { CommandBar } from "@/components/CommandBar";
+import { GearLoader } from "@/components/ui";
 
 type NavItem = {
   href: string;
@@ -71,10 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
         <div className="flex flex-col items-center gap-4">
-          <div className="relative h-12 w-12">
-            <div className="absolute inset-0 rounded-full border-2 border-burgundy-600/30" />
-            <div className="absolute inset-0 rounded-full border-t-2 border-burgundy-400 animate-spin" />
-          </div>
+          <GearLoader size={52} />
           <p className="text-sm text-ink-faint">Loading workspace…</p>
         </div>
       </div>

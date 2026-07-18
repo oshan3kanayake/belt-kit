@@ -47,26 +47,15 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen w-full">
-      {/* Full-screen background image */}
-      <img
-        src={BG_IMAGE}
-        alt=""
-        className="fixed inset-0 h-full w-full object-cover"
-      />
+      <img src={BG_IMAGE} alt="" className="fixed inset-0 h-full w-full object-cover" />
       <div className="fixed inset-0 bg-black/45" />
 
-      {/* Centered transparent glass card */}
       <div className="relative z-10 flex min-h-screen items-center justify-center p-4">
         <div className="w-full max-w-lg rounded-3xl bg-white/10 px-8 py-10 backdrop-blur-2xl sm:px-14 sm:py-12">
-          <h1 className="text-center font-serif text-4xl font-semibold text-white">
-            Belt-Kit
-          </h1>
-          <p className="mt-1 text-center text-sm text-white/70">
-            Sign in to your workshop
-          </p>
+          <h1 className="text-center font-serif text-4xl font-semibold text-white">Belt-Kit</h1>
+          <p className="mt-1 text-center text-sm text-white/70">Sign in to your workshop</p>
 
           <form onSubmit={handleLogin} className="mt-9 space-y-4">
-            {/* Email */}
             <div className="relative">
               <input
                 id="email"
@@ -78,13 +67,9 @@ export default function LoginPage() {
                 placeholder="Email"
                 className="w-full rounded-full border border-white/25 bg-white/5 px-5 py-3.5 pr-12 text-sm text-white outline-none transition placeholder:text-white/60 focus:border-white/50 focus:bg-white/10"
               />
-              <Mail
-                size={18}
-                className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/60"
-              />
+              <Mail size={18} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-white/60" />
             </div>
 
-            {/* Password */}
             <div className="relative">
               <input
                 id="password"
@@ -125,13 +110,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Demo accounts */}
           <div className="mt-8">
             <p className="text-center text-xs font-medium uppercase tracking-wide text-white/50">
               Demo accounts · tap to fill
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              {DEFAULT_ACCOUNTS.map((acc) => (
+              {DEFAULT_ACCOUNTS.filter((acc) =>
+                ["owner", "advisor", "technician"].includes(acc.role)
+              ).map((acc) => (
                 <button
                   key={acc.email}
                   onClick={() => quickFill(acc.email)}
@@ -142,8 +128,7 @@ export default function LoginPage() {
               ))}
             </div>
             <p className="mt-3 text-center text-xs text-white/60">
-              Password:{" "}
-              <span className="font-semibold text-white/85">{DEMO_PASSWORD}</span>
+              Password: <span className="font-semibold text-white/85">{DEMO_PASSWORD}</span>
             </p>
           </div>
         </div>

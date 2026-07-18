@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Shared UI kit — Modal, Toast, Field, Select, Spinner, EmptyState, Badge,
- * ConfirmDialog. All styled in the burgundy/rose-gold luxury theme.
+ * Shared UI kit — Modal, Toast, Field, Spinner, EmptyState, Badge,
+ * ConfirmDialog, DataTable, and a gear-based loader.
  */
 
 import {
@@ -16,7 +16,6 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
-  Loader2,
   Inbox,
   CheckCircle2,
   AlertCircle,
@@ -24,17 +23,48 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Search,
+  Settings,
+  Cog,
 } from "lucide-react";
 
-// ---- Spinner ---------------------------------------------------------------
+// ---- Gear loader -----------------------------------------------------------
+export function GearLoader({ size = 44 }: { size?: number }) {
+  const big = size;
+  const small = Math.round(size * 0.62);
+  return (
+    <div
+      className="relative"
+      style={{ width: big + small * 0.5, height: big + small * 0.35 }}
+      role="status"
+      aria-label="Loading"
+    >
+      <Settings
+        size={big}
+        className="absolute left-0 top-0 text-burgundy-600"
+        style={{ animation: "gear-cw 3s linear infinite" }}
+      />
+      <Cog
+        size={small}
+        className="absolute text-rosegold-500"
+        style={{ right: 0, top: big * 0.08, animation: "gear-ccw 2.2s linear infinite" }}
+      />
+      <Cog
+        size={small}
+        className="absolute text-burgundy-400"
+        style={{ left: big * 0.42, bottom: 0, animation: "gear-ccw 2.6s linear infinite" }}
+      />
+    </div>
+  );
+}
+
 export function Spinner({ size = 24 }: { size?: number }) {
-  return <Loader2 className="animate-spin text-burgundy-600" size={size} />;
+  return <GearLoader size={Math.max(size, 32)} />;
 }
 
 export function CenterSpinner({ label }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16">
-      <Spinner size={28} />
+    <div className="flex flex-col items-center justify-center gap-4 py-16">
+      <GearLoader size={46} />
       {label && <p className="font-sans text-sm text-ink-soft">{label}</p>}
     </div>
   );
@@ -57,9 +87,7 @@ export function EmptyState({
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-burgundy-50 text-burgundy-600">
         <Icon size={24} />
       </div>
-      <h3 className="text-lg font-semibold text-ink">
-        {title}
-      </h3>
+      <h3 className="text-lg font-semibold text-ink">{title}</h3>
       {hint && <p className="max-w-sm font-sans text-sm text-ink-soft">{hint}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
@@ -91,16 +119,14 @@ export function Badge({
     blue: "bg-sky-500",
   };
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-sans text-xs font-medium ${tones[tone]}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-sans text-xs font-medium ${tones[tone]}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${dots[tone]}`} />
       {children}
     </span>
   );
 }
 
-// ---- Field (labeled input) -------------------------------------------------
+// ---- Field -----------------------------------------------------------------
 export function Field({
   label,
   children,
@@ -119,11 +145,7 @@ export function Field({
         {required && <span className="text-rosegold-500"> *</span>}
       </span>
       {children}
-      {hint && (
-        <span className="mt-1 block font-sans text-xs text-ink-faint">
-          {hint}
-        </span>
-      )}
+      {hint && <span className="mt-1 block font-sans text-xs text-ink-faint">{hint}</span>}
     </label>
   );
 }
@@ -201,14 +223,9 @@ export function ConfirmDialog({
     <Modal open={open} onClose={onClose} title={title}>
       <p className="font-sans text-sm leading-relaxed text-ink-soft">{message}</p>
       <div className="mt-6 flex justify-end gap-3">
-        <button onClick={onClose} className="btn-ghost">
-          Cancel
-        </button>
+        <button onClick={onClose} className="btn-ghost">Cancel</button>
         <button
-          onClick={() => {
-            onConfirm();
-            onClose();
-          }}
+          onClick={() => { onConfirm(); onClose(); }}
           className={`btn-primary ${danger ? "!bg-rose-600 hover:!bg-rose-700" : ""}`}
         >
           {confirmLabel}
@@ -253,11 +270,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   t.kind === "success" ? "bg-emerald-500" : "bg-rose-500"
                 }`}
               >
-                {t.kind === "success" ? (
-                  <CheckCircle2 size={15} />
-                ) : (
-                  <AlertCircle size={15} />
-                )}
+                {t.kind === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
               </span>
               <span className="font-sans text-sm text-ink">{t.message}</span>
             </motion.div>
@@ -289,12 +302,8 @@ export function PageHeader({
           <Icon size={19} />
         </div>
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">
-            {eyebrow}
-          </p>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-            {title}
-          </h1>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{eyebrow}</p>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink">{title}</h1>
         </div>
       </div>
       {action}
@@ -312,14 +321,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
   );
 }
 
-/** A table-shaped skeleton shown while data loads. */
-export function TableSkeleton({
-  cols = 5,
-  rows = 6,
-}: {
-  cols?: number;
-  rows?: number;
-}) {
+export function TableSkeleton({ cols = 5, rows = 6 }: { cols?: number; rows?: number }) {
   return (
     <div className="card overflow-hidden">
       <div className="flex gap-4 border-b border-line bg-surface-muted/60 px-5 py-3.5">
@@ -331,10 +333,7 @@ export function TableSkeleton({
         {Array.from({ length: rows }).map((_, r) => (
           <div key={r} className="flex items-center gap-4 px-5 py-4">
             {Array.from({ length: cols }).map((_, c) => (
-              <Skeleton
-                key={c}
-                className={`h-3.5 flex-1 ${c === 0 ? "max-w-[40%]" : ""}`}
-              />
+              <Skeleton key={c} className={`h-3.5 flex-1 ${c === 0 ? "max-w-[40%]" : ""}`} />
             ))}
           </div>
         ))}
@@ -357,10 +356,7 @@ export function SearchInput({
 }) {
   return (
     <div className={`relative ${className}`}>
-      <Search
-        size={17}
-        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint"
-      />
+      <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -423,24 +419,15 @@ export function FilterChips({
 export type Column<T> = {
   key: string;
   header: ReactNode;
-  /** Cell renderer. */
   cell: (row: T) => ReactNode;
-  /** Value used for sorting; return string or number. Omit to disable sort. */
   sortValue?: (row: T) => string | number;
   align?: "left" | "right" | "center";
-  /** Optional fixed width utility class, e.g. "w-32". */
   width?: string;
-  /** Hide on small screens. */
   hideBelow?: "sm" | "md" | "lg";
 };
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
-/**
- * A professional, reusable data table: sortable columns, sticky header,
- * hover row states, optional row-click, and an inline empty state.
- * Pure presentation — the parent supplies rows and columns.
- */
 export function DataTable<T extends { id: string }>({
   rows,
   columns,
@@ -452,7 +439,6 @@ export function DataTable<T extends { id: string }>({
   rows: T[];
   columns: Column<T>[];
   onRowClick?: (row: T) => void;
-  /** Right-aligned per-row action buttons (won't trigger row click). */
   rowActions?: (row: T) => ReactNode;
   initialSort?: { key: string; dir: "asc" | "desc" };
   emptyState?: ReactNode;
@@ -475,11 +461,7 @@ export function DataTable<T extends { id: string }>({
 
   function toggleSort(key: string) {
     setSort((s) =>
-      s?.key === key
-        ? s.dir === "asc"
-          ? { key, dir: "desc" }
-          : null
-        : { key, dir: "asc" }
+      s?.key === key ? (s.dir === "asc" ? { key, dir: "desc" } : null) : { key, dir: "asc" }
     );
   }
 
@@ -502,9 +484,7 @@ export function DataTable<T extends { id: string }>({
                     key={c.key}
                     className={`px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-ink-faint ${
                       c.width ?? ""
-                    } ${c.hideBelow ? hideCls[c.hideBelow] : ""} ${
-                      alignCls[c.align ?? "left"]
-                    }`}
+                    } ${c.hideBelow ? hideCls[c.hideBelow] : ""} ${alignCls[c.align ?? "left"]}`}
                   >
                     {sortable ? (
                       <button
@@ -515,11 +495,7 @@ export function DataTable<T extends { id: string }>({
                       >
                         {c.header}
                         {activeSort ? (
-                          sort!.dir === "asc" ? (
-                            <ChevronUp size={13} />
-                          ) : (
-                            <ChevronDown size={13} />
-                          )
+                          sort!.dir === "asc" ? <ChevronUp size={13} /> : <ChevronDown size={13} />
                         ) : (
                           <ChevronsUpDown size={13} className="opacity-40" />
                         )}
@@ -544,26 +520,19 @@ export function DataTable<T extends { id: string }>({
                   transition={{ duration: 0.25, delay: Math.min(i * 0.025, 0.25) }}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={`group bg-white transition-colors duration-150 ${
-                    onRowClick
-                      ? "cursor-pointer hover:bg-burgundy-50/40"
-                      : "hover:bg-surface-muted/40"
+                    onRowClick ? "cursor-pointer hover:bg-burgundy-50/40" : "hover:bg-surface-muted/40"
                   }`}
                 >
                   {columns.map((c) => (
                     <td
                       key={c.key}
-                      className={`px-5 py-3.5 ${c.hideBelow ? hideCls[c.hideBelow] : ""} ${
-                        alignCls[c.align ?? "left"]
-                      }`}
+                      className={`px-5 py-3.5 ${c.hideBelow ? hideCls[c.hideBelow] : ""} ${alignCls[c.align ?? "left"]}`}
                     >
                       {c.cell(row)}
                     </td>
                   ))}
                   {rowActions && (
-                    <td
-                      className="px-5 py-3.5 text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1 opacity-70 transition-opacity group-hover:opacity-100">
                         {rowActions(row)}
                       </div>
