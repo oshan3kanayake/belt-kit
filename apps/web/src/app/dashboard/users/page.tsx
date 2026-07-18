@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  collection,
-  onSnapshot,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
-import { updatePassword } from "firebase/auth";
+import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import {
   UserCog,
   UserPlus,
@@ -19,7 +13,7 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
-import { db, auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useAuth, Role } from "@/lib/auth-context";
 import { createStaffMember } from "@/lib/create-user";
 import { canManageUsers } from "@/lib/permissions";
@@ -35,16 +29,13 @@ interface UserRow {
   active: boolean;
 }
 
-const ALL_ROLES: Role[] = [
-  "owner",
-  "manager",
-  "advisor",
-  "technician",
-  "accountant",
-];
+// Roles that can be ASSIGNED to new/edited members.
+// Per requirement: Admin (owner), Front Desk (advisor) and Technician only.
+// Manager/accountant still work for existing accounts, but aren't offered here.
+const ASSIGNABLE_ROLES: Role[] = ["owner", "advisor", "technician"];
 
 export default function UsersPage() {
-  const { role, branchId } = useAuth();
+  const { role } = useAuth();
   const { notify } = useToast();
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,13 +63,7 @@ export default function UsersPage() {
       return;
     }
     try {
-      await createStaffMember({
-        name,
-        email,
-        password,
-        role: newRole,
-        branchId: "main",
-      });
+      await createStaffMember({ name, email, password, role: newRole, branchId: "main" });
       notify("Member added. They can sign in now.");
       setAddOpen(false);
     } catch (err: unknown) {
@@ -99,9 +84,7 @@ export default function UsersPage() {
     const unsub = onSnapshot(
       collection(db, "users"),
       (snap) => {
-        setRows(
-          snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<UserRow, "id">) }))
-        );
+        setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<UserRow, "id">) })));
         setLoading(false);
       },
       () => setLoading(false)
@@ -120,17 +103,9 @@ export default function UsersPage() {
     setSavingId(row.id);
     setNotice(null);
     try {
-      // Roles now live in the /users doc, so both name and role save directly
-      // to Firestore (owner/manager permitted by the rules). No Cloud Function
-      // or Blaze needed — fully free tier.
-      await updateDoc(doc(db, "users", row.id), {
-        displayName: draftName,
-        role: draftRole,
-      });
+      await updateDoc(doc(db, "users", row.id), { displayName: draftName, role: draftRole });
       if (draftRole !== row.role) {
-        setNotice(
-          "Role updated. The user should sign out and back in to refresh their access."
-        );
+        setNotice("Role updated. The user should sign out and back in to refresh their access.");
       }
       setEditingId(null);
     } catch {
@@ -140,22 +115,21 @@ export default function UsersPage() {
     }
   }
 
-  const canEdit = role === "owner" || role === "manager";
+  const canEdit = role === "owner" || role === "manager" || role === "advisor";
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <p className="font-sans text-sm uppercase tracking-[0.18em] text-rosegold-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-burgundy-600">
             Administration
           </p>
-          <h1 className="mt-2 flex items-center gap-3 font-serif text-4xl font-semibold text-burgundy-700">
-            <UserCog className="text-rosegold-500" size={30} />
+          <h1 className="mt-1 flex items-center gap-3 text-2xl font-bold tracking-tight text-ink">
+            <UserCog className="text-burgundy-500" size={26} />
             Users &amp; Roles
           </h1>
-          <p className="mt-2 font-sans text-ink-soft">
-            Assign roles to staff. You can have as many members per role as you
-            like. Edit a person to change their role or name.
+          <p className="mt-1 text-sm text-ink-soft">
+            Assign roles to staff. Roles offered: Admin, Front Desk and Technician.
           </p>
         </div>
         {canAdd && (
@@ -169,13 +143,11 @@ export default function UsersPage() {
       <div className="card mb-6 p-6">
         <div className="mb-4 flex items-center gap-2">
           <ShieldCheck size={18} className="text-burgundy-500" />
-          <h2 className="font-serif text-lg font-semibold text-ink">
-            Default sign-in credentials
-          </h2>
+          <h2 className="text-base font-semibold text-ink">Default sign-in credentials</h2>
         </div>
         <div className="overflow-hidden rounded-xl border border-line">
-          <table className="w-full text-left font-sans text-sm">
-            <thead className="bg-surface-muted text-xs uppercase tracking-wider text-ink-soft">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-surface-muted text-[11px] uppercase tracking-wide text-ink-faint">
               <tr>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Email</th>
@@ -184,10 +156,8 @@ export default function UsersPage() {
             </thead>
             <tbody className="divide-y divide-line">
               {DEFAULT_ACCOUNTS.map((a) => (
-                <tr key={a.email} className="bg-surface">
-                  <td className="px-4 py-3 font-medium text-ink">
-                    {ROLE_META[a.role].label}
-                  </td>
+                <tr key={a.email} className="bg-white">
+                  <td className="px-4 py-3 font-medium text-ink">{ROLE_META[a.role].label}</td>
                   <td className="px-4 py-3 text-ink-soft">{a.email}</td>
                   <td className="px-4 py-3">
                     <code className="rounded bg-surface-muted px-2 py-0.5 text-xs text-burgundy-600">
@@ -199,30 +169,25 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 flex items-start gap-2 font-sans text-xs text-ink-faint">
+        <p className="mt-3 flex items-start gap-2 text-xs text-ink-faint">
           <Info size={14} className="mt-0.5 shrink-0" />
-          These are demo defaults. Change the password for any account before
-          going live.
+          These are demo defaults. Change the password for any account before going live.
         </p>
       </div>
 
       {/* Live users from Firestore */}
       <div className="card p-6">
-        <h2 className="mb-4 font-serif text-lg font-semibold text-ink">
-          Active accounts
-        </h2>
+        <h2 className="mb-4 text-base font-semibold text-ink">Active accounts</h2>
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="animate-spin text-rosegold-400" size={24} />
+            <Loader2 className="animate-spin text-burgundy-400" size={24} />
           </div>
         ) : rows.length === 0 ? (
           <div className="rounded-xl bg-surface-muted px-5 py-8 text-center">
-            <p className="font-sans text-sm text-ink-soft">
+            <p className="text-sm text-ink-soft">
               No accounts yet. Run{" "}
-              <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-burgundy-600">
-                npm run seed
-              </code>{" "}
+              <code className="rounded bg-surface px-1.5 py-0.5 text-xs text-burgundy-600">npm run seed</code>{" "}
               in the functions folder to create the default role accounts.
             </p>
           </div>
@@ -234,7 +199,7 @@ export default function UsersPage() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: i * 0.05 }}
-                className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rosegold-sheen text-sm font-semibold text-white">
@@ -249,11 +214,9 @@ export default function UsersPage() {
                         autoFocus
                       />
                     ) : (
-                      <p className="font-sans font-medium text-ink">
-                        {row.displayName || "Unnamed"}
-                      </p>
+                      <p className="font-medium text-ink">{row.displayName || "Unnamed"}</p>
                     )}
-                    <p className="font-sans text-xs text-ink-faint">{row.email}</p>
+                    <p className="text-xs text-ink-faint">{row.email}</p>
                   </div>
                 </div>
 
@@ -264,14 +227,12 @@ export default function UsersPage() {
                       onChange={(e) => setDraftRole(e.target.value as Role)}
                       className="input-luxe py-1.5 text-sm"
                     >
-                      {ALL_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_META[r].label}
-                        </option>
+                      {Array.from(new Set([...ASSIGNABLE_ROLES, row.role])).map((r) => (
+                        <option key={r} value={r}>{ROLE_META[r].label}</option>
                       ))}
                     </select>
                   ) : (
-                    <span className="rounded-full bg-burgundy-50 px-3 py-1 font-sans text-xs font-medium text-burgundy-600">
+                    <span className="rounded-full bg-burgundy-50 px-3 py-1 text-xs font-medium text-burgundy-600">
                       {ROLE_META[row.role]?.label ?? row.role}
                     </span>
                   )}
@@ -285,11 +246,7 @@ export default function UsersPage() {
                           className="rounded-lg bg-burgundy-600 p-2 text-white transition hover:bg-burgundy-700"
                           aria-label="Save"
                         >
-                          {savingId === row.id ? (
-                            <Loader2 size={16} className="animate-spin" />
-                          ) : (
-                            <Check size={16} />
-                          )}
+                          {savingId === row.id ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
@@ -302,7 +259,7 @@ export default function UsersPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(row)}
-                        className="rounded-lg border border-line p-2 text-ink-soft transition hover:border-rosegold-300 hover:text-burgundy-600"
+                        className="rounded-lg border border-line p-2 text-ink-soft transition hover:border-burgundy-300 hover:text-burgundy-600"
                         aria-label="Edit"
                       >
                         <Pencil size={16} />
@@ -318,9 +275,9 @@ export default function UsersPage() {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-4 flex items-start gap-2 rounded-xl bg-surface-muted px-4 py-3 font-sans text-xs text-ink-soft"
+            className="mt-4 flex items-start gap-2 rounded-xl bg-surface-muted px-4 py-3 text-xs text-ink-soft"
           >
-            <Info size={14} className="mt-0.5 shrink-0 text-rosegold-500" />
+            <Info size={14} className="mt-0.5 shrink-0 text-burgundy-500" />
             {notice}
           </motion.p>
         )}
@@ -329,10 +286,7 @@ export default function UsersPage() {
       {/* Add Member modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a staff member">
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleAddMember(new FormData(e.currentTarget));
-          }}
+          onSubmit={(e) => { e.preventDefault(); handleAddMember(new FormData(e.currentTarget)); }}
           className="space-y-4"
         >
           <Field label="Full name">
@@ -346,24 +300,18 @@ export default function UsersPage() {
           </Field>
           <Field label="Role" required>
             <select name="role" defaultValue="technician" className="input-luxe">
-              {ALL_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_META[r].label}
-                </option>
+              {ASSIGNABLE_ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_META[r].label}</option>
               ))}
             </select>
           </Field>
 
           {addErr && (
-            <p className="rounded-lg bg-burgundy-50 px-3.5 py-2.5 font-sans text-sm text-burgundy-600">
-              {addErr}
-            </p>
+            <p className="rounded-lg bg-burgundy-50 px-3.5 py-2.5 text-sm text-burgundy-600">{addErr}</p>
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setAddOpen(false)} className="btn-ghost">
-              Cancel
-            </button>
+            <button type="button" onClick={() => setAddOpen(false)} className="btn-ghost">Cancel</button>
             <button type="submit" disabled={addBusy} className="btn-primary">
               {addBusy ? "Creating…" : "Create member"}
             </button>

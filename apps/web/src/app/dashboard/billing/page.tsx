@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, FileText, TrendingUp, Wallet } from "lucide-react";
+import { Receipt, FileText, TrendingUp, Wallet, TrendingDown, PiggyBank } from "lucide-react";
 import { useCollection } from "@/lib/useCollection";
-import { Invoice, Customer, InvoiceStatus } from "@/lib/models";
+import { Invoice, Customer, Part, InvoiceStatus } from "@/lib/models";
 import { formatMoney, formatDate } from "@/lib/format";
 import {
   PageHeader,
@@ -40,6 +40,7 @@ export default function BillingPage() {
   const router = useRouter();
   const { data: invoices, loading, error } = useCollection<Invoice>("invoices");
   const { data: customers } = useCollection<Customer>("customers");
+  const { data: parts } = useCollection<Part>("parts");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -74,6 +75,24 @@ export default function BillingPage() {
     (i) => i.status !== "paid" && i.status !== "void"
   ).length;
   const paidCount = invoices.filter((i) => i.status === "paid").length;
+
+  // Expenses = estimated cost of parts sold. Match each invoice line to a part
+  // by name and use its cost price. Labor lines have no cost of goods.
+  const { expenses, profit } = useMemo(() => {
+    const costByName = new Map(
+      parts.map((p) => [p.name.toLowerCase().trim(), p.costPriceMinor])
+    );
+    let exp = 0;
+    invoices
+      .filter((i) => i.status !== "void")
+      .forEach((inv) => {
+        (inv.lines || []).forEach((l) => {
+          const cost = costByName.get((l.description || "").toLowerCase().trim());
+          if (cost) exp += cost * (l.quantity || 1);
+        });
+      });
+    return { expenses: exp, profit: collectedMTD - exp };
+  }, [invoices, parts, collectedMTD]);
 
   const revenueSeries = useMemo(() => {
     const days: { key: string; label: string; value: number }[] = [];
@@ -178,25 +197,35 @@ export default function BillingPage() {
           />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1">
-          <StatCard
-            label="Invoices"
-            value={String(invoices.length)}
-            icon={<FileText size={16} />}
-            accent={VIZ.slate}
-          />
-          <StatCard
-            label="Outstanding"
-            value={formatMoney(outstanding)}
-            icon={<TrendingUp size={16} />}
-            accent={VIZ.amber}
-          />
-          <StatCard
-            label="Collected"
-            value={formatMoney(collectedMTD)}
-            icon={<Wallet size={16} />}
-            accent={VIZ.emerald}
-          />
+          <StatCard label="Invoices" value={String(invoices.length)} icon={<FileText size={16} />} accent={VIZ.slate} />
+          <StatCard label="Outstanding" value={formatMoney(outstanding)} icon={<TrendingUp size={16} />} accent={VIZ.amber} />
+          <StatCard label="Collected" value={formatMoney(collectedMTD)} icon={<Wallet size={16} />} accent={VIZ.emerald} />
         </div>
+      </div>
+
+      {/* Profit summary: revenue − parts cost = profit */}
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Revenue (collected)"
+          value={formatMoney(collectedMTD)}
+          hint="All payments received"
+          icon={<Wallet size={16} />}
+          accent={VIZ.emerald}
+        />
+        <StatCard
+          label="Expenses (parts cost)"
+          value={formatMoney(expenses)}
+          hint="Cost of parts sold"
+          icon={<TrendingDown size={16} />}
+          accent={VIZ.rose}
+        />
+        <StatCard
+          label="Profit"
+          value={formatMoney(profit)}
+          hint={profit >= 0 ? "Revenue − expenses" : "Running at a loss"}
+          icon={<PiggyBank size={16} />}
+          accent={profit >= 0 ? VIZ.indigo : VIZ.amber}
+        />
       </div>
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -9,7 +9,6 @@ export interface Branch {
   archived?: boolean;
 }
 
-
 export interface Customer {
   branchId: string;
   displayName: string;
@@ -53,6 +52,8 @@ export interface JobCard {
   taxMinor: number;
   totalMinor: number;
   invoiceId?: string | null;
+  /** Optional planned service date (for the dashboard calendar). */
+  scheduledDate?: Timestamp | null;
   archived?: boolean;
   createdAt?: Timestamp;
 }

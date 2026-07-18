@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { Timestamp } from "firebase/firestore";
 import {
   ClipboardList,
   Plus,
@@ -11,6 +12,7 @@ import {
   List as ListIcon,
   Car,
   User,
+  CalendarClock,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { auth } from "@/lib/firebase";
@@ -35,6 +37,7 @@ import {
   DataTable,
   Column,
   FilterChips,
+  SearchInput,
   useToast,
 } from "@/components/ui";
 
@@ -42,7 +45,6 @@ export default function JobCardsPage() {
   const { branchId, role } = useAuth();
   const router = useRouter();
   const { data: allJobs, loading, error } = useCollection<JobCard>("jobCards");
-  // Technicians only SEE jobs assigned to them (client-side filter — no rules).
   const jobs =
     role === "technician"
       ? allJobs.filter((j) =>
@@ -55,6 +57,7 @@ export default function JobCardsPage() {
 
   const [view, setView] = useState<"board" | "list">("board");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState("");
@@ -73,6 +76,19 @@ export default function JobCardsPage() {
     [vehicles, selectedCustomer]
   );
 
+  // Search across complaint, customer name and vehicle label.
+  const searched = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return jobs;
+    return jobs.filter(
+      (j) =>
+        j.complaint?.toLowerCase().includes(q) ||
+        customerName(j.customerId).toLowerCase().includes(q) ||
+        vehicleLabel(j.vehicleId).toLowerCase().includes(q)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, search, customers, vehicles]);
+
   const byStatus = useMemo(() => {
     const map: Record<JobStatus, (JobCard & { id: string })[]> = {
       booked: [],
@@ -82,16 +98,16 @@ export default function JobCardsPage() {
       ready: [],
       delivered: [],
     };
-    jobs.forEach((j) => map[j.status]?.push(j));
+    searched.forEach((j) => map[j.status]?.push(j));
     return map;
-  }, [jobs]);
+  }, [searched]);
 
   const listRows = useMemo(
     () =>
       statusFilter === "all"
-        ? jobs
-        : jobs.filter((j) => j.status === statusFilter),
-    [jobs, statusFilter]
+        ? searched
+        : searched.filter((j) => j.status === statusFilter),
+    [searched, statusFilter]
   );
 
   const columns: Column<JobCard & { id: string }>[] = [
@@ -159,6 +175,7 @@ export default function JobCardsPage() {
   async function handleCreate(form: FormData) {
     if (!branchId) return;
     setSaving(true);
+    const dateStr = String(form.get("scheduledDate") || "");
     const payload = {
       customerId: String(form.get("customerId") || ""),
       vehicleId: String(form.get("vehicleId") || ""),
@@ -169,6 +186,7 @@ export default function JobCardsPage() {
       taxMinor: 0,
       totalMinor: 0,
       invoiceId: null,
+      scheduledDate: dateStr ? Timestamp.fromDate(new Date(dateStr)) : null,
     };
     if (!payload.customerId || !payload.vehicleId || !payload.complaint) {
       notify("Customer, vehicle and complaint are required.", "error");
@@ -176,10 +194,12 @@ export default function JobCardsPage() {
       return;
     }
     try {
-      await createDoc("jobCards", branchId, payload);
-      notify("Job card created.");
+      const ref = await createDoc("jobCards", branchId, payload);
+      notify("Job card created — now add parts, labor & a technician.");
       setModalOpen(false);
       setSelectedCustomer("");
+      // Take them straight into the job so it's obvious what to do next.
+      router.push(`/dashboard/job-cards/${ref.id}`);
     } catch {
       notify("Could not create job card.", "error");
     } finally {
@@ -228,19 +248,14 @@ export default function JobCardsPage() {
         }
       />
 
-      {error && (
-        <div className="mb-4 rounded-xl bg-burgundy-50 px-4 py-3 font-sans text-sm text-burgundy-600">
-          {error}
-        </div>
-      )}
-
-      {view === "list" && !loading && jobs.length > 0 && (
-        <div className="mb-5">
+      {/* Search + status filters */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {view === "list" && jobs.length > 0 ? (
           <FilterChips
             value={statusFilter}
             onChange={setStatusFilter}
             options={[
-              { value: "all", label: "All", count: jobs.length },
+              { value: "all", label: "All", count: searched.length },
               ...JOB_STATUS_ORDER.map((s) => ({
                 value: s,
                 label: JOB_STATUS_META[s].label,
@@ -248,6 +263,20 @@ export default function JobCardsPage() {
               })),
             ]}
           />
+        ) : (
+          <span />
+        )}
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search complaint, customer or vehicle…"
+          className="w-full sm:max-w-xs"
+        />
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-xl bg-burgundy-50 px-4 py-3 font-sans text-sm text-burgundy-600">
+          {error}
         </div>
       )}
 
@@ -275,6 +304,12 @@ export default function JobCardsPage() {
               </button>
             )
           }
+        />
+      ) : searched.length === 0 ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="No matches"
+          hint="No job cards match your search."
         />
       ) : view === "board" ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -410,6 +445,9 @@ export default function JobCardsPage() {
               className="input-luxe resize-none"
               placeholder="e.g. Brake noise on front left, service due"
             />
+          </Field>
+          <Field label="Scheduled date" hint="Optional — shows on the dashboard calendar.">
+            <input name="scheduledDate" type="date" className="input-luxe" />
           </Field>
           <div className="flex justify-end gap-3 pt-2">
             <button
