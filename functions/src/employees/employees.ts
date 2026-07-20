@@ -1,25 +1,25 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+
 import {
     getFirestore,
     FieldValue
 } from "firebase-admin/firestore";
+
 import {
-    getAuth
+    getAuth,
+    UserRecord
 } from "firebase-admin/auth";
 
 import {
     writeAudit
 } from "../audit";
 
+import {
+    Role
+} from "../types";
+
+
 const db = getFirestore();
-
-
-type EmployeeRole =
-    | "owner"
-    | "manager"
-    | "advisor"
-    | "technician"
-    | "accountant";
 
 
 interface EmployeeData {
@@ -30,7 +30,7 @@ interface EmployeeData {
 
     fullName: string;
 
-    role: EmployeeRole;
+    role: Role;
 
     phone?: string;
 
@@ -41,8 +41,8 @@ interface EmployeeData {
 }
 
 
-const ALLOWED_ROLES: EmployeeRole[] = [
-    "owner",
+
+const EMPLOYEE_ROLES: Role[] = [
     "manager",
     "advisor",
     "technician",
@@ -50,8 +50,13 @@ const ALLOWED_ROLES: EmployeeRole[] = [
 ];
 
 
-// Owner and Manager only
+
+// ------------------------------------------------
+// Permission check
+// ------------------------------------------------
+
 function verifyEmployeeManager(request: any) {
+
 
     if (!request.auth) {
 
@@ -59,11 +64,12 @@ function verifyEmployeeManager(request: any) {
             "unauthenticated",
             "User is not authenticated"
         );
+
     }
 
 
     const role =
-        request.auth.token.role;
+        request.auth.token.role as Role | undefined;
 
 
     if (
@@ -75,13 +81,16 @@ function verifyEmployeeManager(request: any) {
             "permission-denied",
             "Only owner or manager can manage employees"
         );
+
     }
 
 }
 
 
 
+// ------------------------------------------------
 // CREATE EMPLOYEE
+// ------------------------------------------------
 
 export const createEmployee = onCall(
 async(request)=>{
@@ -94,13 +103,21 @@ async(request)=>{
         request.data as EmployeeData;
 
 
+
     const {
+
         email,
+
         password,
+
         fullName,
+
         role,
+
         phone,
+
         salaryMinor,
+
         joinDate
 
     } = data;
@@ -118,12 +135,13 @@ async(request)=>{
             "invalid-argument",
             "Missing employee data"
         );
+
     }
 
 
 
     if(
-        !ALLOWED_ROLES.includes(role)
+        !EMPLOYEE_ROLES.includes(role)
     ){
 
         throw new HttpsError(
@@ -139,16 +157,15 @@ async(request)=>{
         request.auth!.token.role;
 
 
-    // Manager cannot create owner
 
     if(
         callerRole === "manager" &&
-        role === "owner"
+        role === "manager"
     ){
 
         throw new HttpsError(
             "permission-denied",
-            "Managers cannot create owners"
+            "Managers cannot create managers"
         );
 
     }
@@ -171,11 +188,11 @@ async(request)=>{
 
 
 
-    let user;
+ let user: UserRecord | undefined;
 
 
 
-    try {
+    try{
 
 
         user =
@@ -199,9 +216,11 @@ async(request)=>{
             user.uid,
 
             {
+
                 role,
 
                 branchId
+
             }
 
         );
@@ -222,6 +241,7 @@ async(request)=>{
             role,
 
             branchId,
+
 
             phone:
             phone ?? null,
@@ -244,7 +264,7 @@ async(request)=>{
             FieldValue.serverTimestamp(),
 
 
-            createdBy:
+            createdByUid:
             request.auth!.uid
 
         });
@@ -272,9 +292,13 @@ async(request)=>{
 
 
             after:{
+
                 fullName,
+
                 role,
+
                 branchId
+
             }
 
         });
@@ -315,7 +339,9 @@ async(request)=>{
 
 
 
+// ------------------------------------------------
 // UPDATE EMPLOYEE
+// ------------------------------------------------
 
 export const updateEmployee = onCall(
 async(request)=>{
@@ -326,7 +352,9 @@ async(request)=>{
 
 
     const {
+
         employeeId,
+
         updates
 
     } = request.data;
@@ -374,13 +402,41 @@ async(request)=>{
 
 
 
+    const callerRole =
+        request.auth!.token.role;
+
+
+    const branchId =
+        request.auth!.token.branchId;
+
+
+
+    if(
+        before?.branchId !== branchId &&
+        callerRole !== "owner"
+    ){
+
+        throw new HttpsError(
+            "permission-denied",
+            "Cannot access another branch employee"
+        );
+
+    }
+
+
+
     const allowedFields = [
 
         "fullName",
+
         "phone",
+
         "salaryMinor",
+
         "joinDate",
+
         "active",
+
         "archived"
 
     ];
@@ -393,14 +449,16 @@ async(request)=>{
 
     allowedFields.forEach(field=>{
 
+
         if(
             updates[field] !== undefined
         ){
 
             safeUpdates[field] =
-                updates[field];
+            updates[field];
 
         }
+
 
     });
 
@@ -419,9 +477,7 @@ async(request)=>{
 
     await writeAudit({
 
-        branchId:
-        request.auth!.token.branchId,
-
+        branchId,
 
         actorUid:
         request.auth!.uid,
@@ -442,15 +498,16 @@ async(request)=>{
         before,
 
 
-        after:
-        safeUpdates
+        after:safeUpdates
 
     });
 
 
 
     return {
+
         success:true
+
     };
 
 
@@ -459,10 +516,12 @@ async(request)=>{
 
 
 
-// ASSIGN ROLE
+// ------------------------------------------------
+// ASSIGN EMPLOYEE ROLE
+// ------------------------------------------------
 
-export const assignEmployeeRole =
-onCall(async(request)=>{
+export const assignEmployeeRole = onCall(
+async(request)=>{
 
 
     verifyEmployeeManager(request);
@@ -470,7 +529,9 @@ onCall(async(request)=>{
 
 
     const {
+
         employeeId,
+
         role
 
     } = request.data;
@@ -492,7 +553,7 @@ onCall(async(request)=>{
 
 
     if(
-        !ALLOWED_ROLES.includes(role)
+        !EMPLOYEE_ROLES.includes(role)
     ){
 
         throw new HttpsError(
@@ -501,11 +562,6 @@ onCall(async(request)=>{
         );
 
     }
-
-
-
-    const branchId =
-        request.auth!.token.branchId;
 
 
 
@@ -531,8 +587,38 @@ onCall(async(request)=>{
 
 
 
+    const employee =
+        snapshot.data();
+
+
+
     const oldRole =
-        snapshot.data()?.role;
+        employee?.role;
+
+
+
+    const callerRole =
+        request.auth!.token.role;
+
+
+
+    if(
+        oldRole === "owner" &&
+        callerRole !== "owner"
+    ){
+
+        throw new HttpsError(
+            "permission-denied",
+            "Only owner can modify owner role"
+        );
+
+    }
+
+
+
+    const branchId =
+        employee?.branchId ??
+        request.auth!.token.branchId;
 
 
 
@@ -585,12 +671,16 @@ onCall(async(request)=>{
 
 
         before:{
+
             role:oldRole
+
         },
 
 
         after:{
+
             role
+
         }
 
     });
@@ -598,7 +688,9 @@ onCall(async(request)=>{
 
 
     return {
+
         success:true
+
     };
 
 
