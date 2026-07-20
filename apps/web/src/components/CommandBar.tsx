@@ -17,12 +17,15 @@ import {
   Receipt,
   Package,
   LayoutDashboard,
+  BarChart3,
   CornerDownLeft,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
 import { useCollection } from "@/lib/useCollection";
 import { Customer, Vehicle, JobCard, Invoice } from "@/lib/models";
+import { useAuth } from "@/lib/auth-context";
+import { canViewReports } from "@/lib/permissions";
 
 type Item = {
   id: string;
@@ -35,6 +38,7 @@ type Item = {
 
 export function CommandBar() {
   const router = useRouter();
+  const { role } = useAuth();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -72,8 +76,11 @@ export function CommandBar() {
       { id: "n-veh", label: "Vehicles", icon: Car, href: "/dashboard/vehicles", group: "Go to" },
       { id: "n-inv", label: "Inventory", icon: Package, href: "/dashboard/inventory", group: "Go to" },
       { id: "n-bill", label: "Billing", icon: Receipt, href: "/dashboard/billing", group: "Go to" },
+      ...(canViewReports(role)
+        ? [{ id: "n-reports", label: "Reports", icon: BarChart3, href: "/dashboard/reports", group: "Go to" }]
+        : []),
     ],
-    []
+    [role]
   );
 
   const custName = useCallback(

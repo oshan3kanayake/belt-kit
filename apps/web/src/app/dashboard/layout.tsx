@@ -13,6 +13,7 @@ import {
   Car,
   Package,
   Receipt,
+  BarChart3,
   UserCog,
   LogOut,
   Search,
@@ -39,6 +40,7 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/vehicles",   label: "Vehicles",      icon: Car,             roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/inventory",  label: "Inventory",     icon: Package,         roles: ["owner","manager","advisor"] },
   { href: "/dashboard/billing",    label: "Billing",       icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
+  { href: "/dashboard/reports",    label: "Reports",       icon: BarChart3,       roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/users",      label: "Users & Roles", icon: UserCog,         roles: ["owner","manager"] },
 ];
 

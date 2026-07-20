@@ -31,7 +31,7 @@ const READABLE: Record<Role, string[]> = {
   technician: ["jobCards", "jobCardLines", "parts", "branches"],
   accountant: [
     "jobCards", "jobCardLines", "customers", "vehicles",
-    "invoices", "payments", "branches", "auditLog",
+    "parts", "invoices", "payments", "branches", "auditLog",
   ],
   customer: ["invoices", "payments"],
   pending: [],
@@ -65,6 +65,10 @@ export const canManageInventory = (r: Role | null) =>
 // Financial actions: invoices + payments. Front-desk included per request.
 export const canDoFinancial = (r: Role | null) =>
   r === "owner" || r === "manager" || r === "advisor" || r === "accountant";
+
+// Package 3 reports combine finance, completed jobs, customers, vehicles and
+// inventory. This deliberately matches the roles exposed in dashboard nav.
+export const canViewReports = canDoFinancial;
 
 // Add staff members + assign roles: owner, manager, front-desk.
 export const canManageUsers = isOps;
