@@ -420,7 +420,7 @@ export function PaymentTerminal({
         <div>
           <p className="text-sm font-semibold">Demo payment only — no real money will be charged.</p>
           <p className="mt-0.5 text-xs leading-relaxed text-amber-700">
-            Use test details only. This prototype is not connected to a bank or payment gateway.
+            Use test details only. This prototype is not connected to PayPal, WebxPay, a bank, or any live payment gateway.
           </p>
         </div>
       </div>

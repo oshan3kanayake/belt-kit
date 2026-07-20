@@ -40,6 +40,10 @@ service cloud.firestore {
              && data.totalMinor is int && data.totalMinor > 0
              && data.amountPaidMinor is int && data.amountPaidMinor >= 0
              && data.amountPaidMinor <= data.totalMinor
+             && (!data.keys().hasAny(['taxRatePercent'])
+                 || (data.taxRatePercent is number
+                     && data.taxRatePercent >= 0
+                     && data.taxRatePercent <= 100))
              && data.status in ['draft', 'issued', 'part_paid', 'paid', 'void']
              && (data.status != 'paid'
                  || data.amountPaidMinor == data.totalMinor)

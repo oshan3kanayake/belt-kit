@@ -103,6 +103,7 @@ export default function InvoiceDetailPage() {
   const [charges, setCharges] = useState<EditableCharge[]>([]);
   const [discountType, setDiscountType] = useState<DiscountType>("percent");
   const [discountValueStr, setDiscountValueStr] = useState("0");
+  const [taxRateValueStr, setTaxRateValueStr] = useState("0");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const paymentInFlight = useRef(false);
 
@@ -142,14 +143,14 @@ export default function InvoiceDetailPage() {
           discountType === "fixed"
             ? toMinor(discountValueStr)
             : Number(discountValueStr),
-        taxRatePercent: invoiceTaxRate,
+        taxRatePercent: Number(taxRateValueStr),
       }),
     [
       discountType,
       discountValueStr,
       editableExtraCharges,
       invoice?.subtotalMinor,
-      invoiceTaxRate,
+      taxRateValueStr,
     ]
   );
 
@@ -296,6 +297,7 @@ export default function InvoiceDetailPage() {
         ? ((invoice.discountValue ?? 0) / 100).toFixed(2)
         : String(invoice.discountValue ?? 0)
     );
+    setTaxRateValueStr(String(Number(invoiceTaxRate.toFixed(4))));
     setAdjustModal(true);
   }
 
@@ -317,6 +319,14 @@ export default function InvoiceDetailPage() {
     }
     if (discountType === "percent" && Number(discountValueStr) > 100) {
       notify("Percentage discounts cannot be greater than 100%.", "error");
+      return;
+    }
+    if (
+      !Number.isFinite(Number(taxRateValueStr)) ||
+      Number(taxRateValueStr) < 0 ||
+      Number(taxRateValueStr) > 100
+    ) {
+      notify("Enter a tax rate between 0% and 100%.", "error");
       return;
     }
     if (
@@ -355,11 +365,7 @@ export default function InvoiceDetailPage() {
             discountType === "fixed"
               ? toMinor(discountValueStr)
               : Number(discountValueStr),
-          taxRatePercent:
-            fresh.taxRatePercent ??
-            (fresh.subtotalMinor > 0
-              ? (fresh.taxMinor / fresh.subtotalMinor) * 100
-              : 0),
+          taxRatePercent: Number(taxRateValueStr),
         });
         if (totals.totalMinor <= 0) {
           throw new Error("The discount must leave a positive invoice total.");
@@ -901,6 +907,23 @@ export default function InvoiceDetailPage() {
                 />
               </Field>
             </div>
+          </div>
+
+          <div className="border-t border-line pt-5">
+            <Field
+              label="Tax rate (%)"
+              hint="This is saved with this invoice and can be changed before the first payment."
+            >
+              <input
+                className="input-luxe max-w-xs"
+                inputMode="decimal"
+                min="0"
+                max="100"
+                placeholder="0"
+                value={taxRateValueStr}
+                onChange={(event) => setTaxRateValueStr(event.target.value)}
+              />
+            </Field>
           </div>
 
           <div className="rounded-2xl border border-burgundy-100 bg-burgundy-50/50 p-5">

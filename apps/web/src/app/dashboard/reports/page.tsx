@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ClipboardList,
   Download,
+  FileDown,
   Package,
   Receipt,
   ShieldAlert,
@@ -17,7 +18,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useCollection } from "@/lib/useCollection";
 import { Customer, Invoice, JobCard, Part, Payment, Vehicle } from "@/lib/models";
 import { canViewReports } from "@/lib/permissions";
-import { downloadCsv, reportCsvFilename } from "@/lib/csv-export";
+import { downloadCsv, reportCsvFilename, reportPdfFilename } from "@/lib/csv-export";
+import { downloadReportPdf } from "@/lib/pdf-export";
 import { formatDate, formatMoney } from "@/lib/format";
 import { Badge, EmptyState, PageHeader, TableSkeleton } from "@/components/ui";
 
@@ -241,6 +243,7 @@ function ReportCard({
   hint,
   onSelect,
   onDownload,
+  onDownloadPdf,
   downloadDisabled,
 }: {
   active: boolean;
@@ -251,6 +254,7 @@ function ReportCard({
   hint: string;
   onSelect: () => void;
   onDownload: () => void;
+  onDownloadPdf: () => void;
   downloadDisabled?: boolean;
 }) {
   return (
@@ -271,14 +275,24 @@ function ReportCard({
         <p className="mt-4 text-xl font-semibold tracking-tight text-ink">{value}</p>
         <p className="mt-1 text-xs text-ink-faint">{hint}</p>
       </button>
-      <button
-        type="button"
-        onClick={onDownload}
-        disabled={downloadDisabled}
-        className="btn-ghost mt-4 w-full !py-2 text-xs"
-      >
-        <Download size={14} /> Download CSV
-      </button>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={downloadDisabled}
+          className="btn-ghost w-full !px-2 !py-2 text-xs"
+        >
+          <Download size={14} /> CSV
+        </button>
+        <button
+          type="button"
+          onClick={onDownloadPdf}
+          disabled={downloadDisabled}
+          className="btn-ghost w-full !px-2 !py-2 text-xs"
+        >
+          <FileDown size={14} /> PDF
+        </button>
+      </div>
     </div>
   );
 }
@@ -295,7 +309,7 @@ function TableFrame({
       <div className="overflow-x-auto">{children}</div>
       {count > PREVIEW_LIMIT && (
         <p className="border-t border-line px-5 py-3 text-xs text-ink-faint">
-          Showing the first {PREVIEW_LIMIT} of {count} rows. The CSV includes every row.
+          Showing the first {PREVIEW_LIMIT} of {count} rows. Downloads include every row.
         </p>
       )}
     </>
@@ -683,6 +697,23 @@ export default function ReportsPage() {
       revenueRows
     );
 
+  const exportRevenuePdf = () =>
+    downloadReportPdf<RevenueRow>({
+      filename: reportPdfFilename("revenue", fromDate, toDate),
+      title: "Revenue report",
+      periodLabel,
+      columns: [
+        { header: "Last payment", value: (row) => csvDate(row.date) },
+        { header: "Invoice", value: (row) => row.invoice },
+        { header: "Customer", value: (row) => row.customer },
+        { header: "Invoice total", value: (row) => formatMoney(row.totalMinor, row.currency) },
+        { header: "Collected", value: (row) => formatMoney(row.paidMinor, row.currency) },
+        { header: "Due", value: (row) => formatMoney(row.dueMinor, row.currency) },
+        { header: "Status", value: (row) => displayStatus(row.status) },
+      ],
+      rows: revenueRows,
+    });
+
   const exportProfit = () =>
     downloadCsv<ProfitRow>(
       reportCsvFilename("profit", fromDate, toDate),
@@ -699,6 +730,23 @@ export default function ReportsPage() {
       profitRows
     );
 
+  const exportProfitPdf = () =>
+    downloadReportPdf<ProfitRow>({
+      filename: reportPdfFilename("gross-profit", fromDate, toDate),
+      title: "Gross profit report",
+      periodLabel,
+      columns: [
+        { header: "Date", value: (row) => csvDate(row.date) },
+        { header: "Invoice", value: (row) => row.invoice },
+        { header: "Customer", value: (row) => row.customer },
+        { header: "Sales excl. tax", value: (row) => formatMoney(row.salesMinor, row.currency) },
+        { header: "Parts cost", value: (row) => formatMoney(row.partsCostMinor, row.currency) },
+        { header: "Gross profit", value: (row) => formatMoney(row.profitMinor, row.currency) },
+        { header: "Cost basis", value: (row) => row.costBasis },
+      ],
+      rows: profitRows,
+    });
+
   const exportCompletedJobs = () =>
     downloadCsv<CompletedJobRow>(
       reportCsvFilename("completed-jobs", fromDate, toDate),
@@ -714,6 +762,23 @@ export default function ReportsPage() {
       ],
       completedJobRows
     );
+
+  const exportCompletedJobsPdf = () =>
+    downloadReportPdf<CompletedJobRow>({
+      filename: reportPdfFilename("completed-jobs", fromDate, toDate),
+      title: "Completed jobs report",
+      periodLabel,
+      columns: [
+        { header: "Completed", value: (row) => csvDate(row.date) },
+        { header: "Job", value: (row) => row.job },
+        { header: "Customer", value: (row) => row.customer },
+        { header: "Registration", value: (row) => row.plateNumber },
+        { header: "Vehicle", value: (row) => row.vehicle },
+        { header: "Complaint", value: (row) => row.complaint },
+        { header: "Total", value: (row) => formatMoney(row.totalMinor) },
+      ],
+      rows: completedJobRows,
+    });
 
   const exportInventory = () => {
     const today = localDateInput(new Date());
@@ -733,6 +798,26 @@ export default function ReportsPage() {
       ],
       inventoryRows
     );
+  };
+
+  const exportInventoryPdf = () => {
+    const today = localDateInput(new Date());
+    downloadReportPdf<InventoryRow>({
+      filename: `belt-kit-inventory-snapshot-${today}.pdf`,
+      title: "Inventory snapshot",
+      periodLabel: "Current inventory snapshot",
+      columns: [
+        { header: "SKU", value: (row) => row.sku },
+        { header: "Part", value: (row) => row.name },
+        { header: "On hand", value: (row) => row.quantity },
+        { header: "Reorder at", value: (row) => row.reorderLevel },
+        { header: "Status", value: (row) => row.lowStock ? "Low stock" : "In stock" },
+        { header: "Bin", value: (row) => row.binLocation },
+        { header: "Unit cost", value: (row) => formatMoney(row.unitCostMinor) },
+        { header: "Retail value", value: (row) => formatMoney(row.retailValueMinor) },
+      ],
+      rows: inventoryRows,
+    });
   };
 
   const loading =
@@ -821,6 +906,7 @@ export default function ReportsPage() {
               hint={`${revenueRows.length} paid invoices · ${formatMoney(totalInvoiced, primaryCurrency)} invoiced`}
               onSelect={() => setActiveReport("revenue")}
               onDownload={exportRevenue}
+              onDownloadPdf={exportRevenuePdf}
               downloadDisabled={invalidRange}
             />
             <ReportCard
@@ -832,6 +918,7 @@ export default function ReportsPage() {
               hint={`${profitRows.length} invoices in ${periodLabel.toLocaleLowerCase()}`}
               onSelect={() => setActiveReport("profit")}
               onDownload={exportProfit}
+              onDownloadPdf={exportProfitPdf}
               downloadDisabled={invalidRange}
             />
             <ReportCard
@@ -843,6 +930,7 @@ export default function ReportsPage() {
               hint={`Delivered in ${periodLabel.toLocaleLowerCase()}`}
               onSelect={() => setActiveReport("jobs")}
               onDownload={exportCompletedJobs}
+              onDownloadPdf={exportCompletedJobsPdf}
               downloadDisabled={invalidRange}
             />
             <ReportCard
@@ -854,6 +942,7 @@ export default function ReportsPage() {
               hint={`${inventoryRows.length} parts · ${lowStockCount} low stock`}
               onSelect={() => setActiveReport("inventory")}
               onDownload={exportInventory}
+              onDownloadPdf={exportInventoryPdf}
             />
           </div>
 

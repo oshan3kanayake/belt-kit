@@ -61,6 +61,16 @@ export const generateInvoice = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Branch settings missing.");
     }
     const branch = branchSnap.data() as Branch;
+    if (
+      !Number.isFinite(branch.taxRatePercent) ||
+      branch.taxRatePercent < 0 ||
+      branch.taxRatePercent > 100
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Set a valid branch tax rate between 0% and 100% before invoicing."
+      );
+    }
 
     // Read all line items for this job card.
     const linesSnap = await tx.get(
@@ -117,9 +127,7 @@ export const generateInvoice = onCall(async (request) => {
       };
     });
 
-    const taxMinor = Math.round(
-      subtotalMinor * (branch.taxRatePercent / 100)
-    );
+    const taxMinor = Math.round(subtotalMinor * (branch.taxRatePercent / 100));
     const totalMinor = subtotalMinor + taxMinor;
 
     const invoiceRef = db.collection("invoices").doc();

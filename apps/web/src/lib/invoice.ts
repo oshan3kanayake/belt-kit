@@ -31,8 +31,7 @@ import { JobCard, JobCardLine, Branch, Part } from "./models";
 interface BranchDoc extends Branch {}
 
 export async function generateInvoiceClient(
-  jobCardId: string,
-  branchTaxPercentFallback = 18
+  jobCardId: string
 ): Promise<string> {
   const jobRef = doc(db, "jobCards", jobCardId);
   const jobSnap = await getDoc(jobRef);
@@ -46,8 +45,19 @@ export async function generateInvoiceClient(
   const branch = branchSnap.exists()
     ? (branchSnap.data() as BranchDoc)
     : null;
-  const currency = branch?.currency ?? "LKR";
-  const taxPercent = branch?.taxRatePercent ?? branchTaxPercentFallback;
+  if (!branch) {
+    throw new Error("Branch settings could not be found. Set the branch tax rate before invoicing.");
+  }
+  if (
+    typeof branch.taxRatePercent !== "number" ||
+    !Number.isFinite(branch.taxRatePercent) ||
+    branch.taxRatePercent < 0 ||
+    branch.taxRatePercent > 100
+  ) {
+    throw new Error("Set a valid branch tax rate between 0% and 100% before invoicing.");
+  }
+  const currency = branch.currency || "LKR";
+  const taxPercent = branch.taxRatePercent;
 
   // Lines for this job card.
   const linesSnap = await getDocs(

@@ -68,10 +68,27 @@ export function reportCsvFilename(
   fromDate?: string,
   toDate?: string
 ): string {
+  return reportFilename(reportName, "csv", fromDate, toDate);
+}
+
+export function reportPdfFilename(
+  reportName: string,
+  fromDate?: string,
+  toDate?: string
+): string {
+  return reportFilename(reportName, "pdf", fromDate, toDate);
+}
+
+function reportFilename(
+  reportName: string,
+  extension: "csv" | "pdf",
+  fromDate?: string,
+  toDate?: string
+): string {
   const report = safeFilenamePart(reportName) || "report";
   let period = "all-time";
   if (fromDate && toDate) period = `${fromDate}-to-${toDate}`;
   else if (fromDate) period = `from-${fromDate}`;
   else if (toDate) period = `through-${toDate}`;
-  return `belt-kit-${report}-${period}.csv`;
+  return `belt-kit-${report}-${period}.${extension}`;
 }

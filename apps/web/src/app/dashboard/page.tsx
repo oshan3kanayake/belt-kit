@@ -22,6 +22,7 @@ import {
   Customer,
   Part,
   Invoice,
+  Payment,
   JOB_STATUS_META,
   JOB_STATUS_ORDER,
 } from "@/lib/models";
@@ -51,10 +52,22 @@ export default function DashboardHome() {
   const { data: customers } = useCollection<Customer>("customers");
   const { data: parts } = useCollection<Part>("parts");
   const { data: invoices } = useCollection<Invoice>("invoices");
+  const { data: payments } = useCollection<Payment>("payments");
 
   const openJobs = jobs.filter((j) => j.status !== "delivered").length;
   const lowStock = parts.filter((p) => p.lowStock).length;
-  const collected = invoices.reduce((s, i) => s + (i.amountPaidMinor || 0), 0);
+  const paymentInvoiceIds = useMemo(
+    () => new Set(payments.map((payment) => payment.invoiceId)),
+    [payments]
+  );
+  const collected = useMemo(
+    () =>
+      payments.reduce((sum, payment) => sum + (payment.amountMinor || 0), 0) +
+      invoices
+        .filter((invoice) => !paymentInvoiceIds.has(invoice.id))
+        .reduce((sum, invoice) => sum + (invoice.amountPaidMinor || 0), 0),
+    [invoices, paymentInvoiceIds, payments]
+  );
   const outstanding = invoices
     .filter((i) => i.status !== "paid" && i.status !== "void")
     .reduce((s, i) => s + (i.totalMinor - i.amountPaidMinor), 0);
@@ -79,14 +92,21 @@ export default function DashboardHome() {
       });
     }
     const idx = new Map(days.map((d, i) => [d.key, i]));
-    invoices.forEach((inv) => {
-      const t = inv.createdAt?.toDate?.();
+    payments.forEach((payment) => {
+      const t = payment.createdAt?.toDate?.();
       if (!t) return;
       const k = t.toISOString().slice(0, 10);
-      if (idx.has(k)) days[idx.get(k)!].value += inv.amountPaidMinor / 100;
+      if (idx.has(k)) days[idx.get(k)!].value += payment.amountMinor / 100;
+    });
+    invoices.forEach((invoice) => {
+      if (paymentInvoiceIds.has(invoice.id) || !invoice.amountPaidMinor) return;
+      const t = invoice.createdAt?.toDate?.();
+      if (!t) return;
+      const k = t.toISOString().slice(0, 10);
+      if (idx.has(k)) days[idx.get(k)!].value += invoice.amountPaidMinor / 100;
     });
     return days;
-  }, [invoices]);
+  }, [invoices, paymentInvoiceIds, payments]);
 
   const revSpark = revenueSeries.map((d) => d.value);
 
