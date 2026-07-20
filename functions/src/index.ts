@@ -33,3 +33,11 @@ export {
 export {
     createEmployeePayment
 } from "./employees/employeePayments";
+
+export {
+    getEmployeePayments
+} from "./employees/employeePaymentList";
+
+export {
+    getEmployeePaymentHistory
+} from "./employees/employeePaymentHistory";
