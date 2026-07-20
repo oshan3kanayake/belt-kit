@@ -25,6 +25,11 @@ assignEmployeeRole
 from "./employees/employees";
 
 export {
+getEmployees
+}
+from "./employees/employeeList";
+
+export {
     createEmployeePayment
 }
 from "./employeePayments/employeePayments";
