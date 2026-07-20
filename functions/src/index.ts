@@ -23,3 +23,8 @@ updateEmployee,
 assignEmployeeRole
 }
 from "./employees/employees";
+
+export {
+    createEmployeePayment
+}
+from "./employeePayments/employeePayments";

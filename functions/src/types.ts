@@ -176,3 +176,19 @@ export interface AuditLogEntry {
   after?: Record<string, unknown> | null;
   at: Timestamp;
 }
+
+// ---- Employee Payments -----------------------------------------------------
+
+export interface EmployeePayment {
+    employeeId: string;
+    branchId: string;
+
+    month: string; 
+    // Example: "2026-07"
+
+    amountPaidMinor: number;
+
+    paidDate: string;
+
+    createdBy: string;
+}
