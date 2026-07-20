@@ -26,7 +26,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
-import { JobCard, JobCardLine, Branch } from "./models";
+import { JobCard, JobCardLine, Branch, Part } from "./models";
 
 interface BranchDoc extends Branch {}
 
@@ -60,14 +60,37 @@ export async function generateInvoiceClient(
   if (activeLines.length === 0)
     throw new Error("Cannot invoice a job card with no line items.");
 
+  // Freeze part costs as well as selling prices so future profit reports do not
+  // change when the inventory catalogue is edited.
+  const partIds = Array.from(
+    new Set(
+      activeLines
+        .filter((line) => line.kind === "part" && line.partId)
+        .map((line) => line.partId as string)
+    )
+  );
+  const partSnaps = await Promise.all(
+    partIds.map((partId) => getDoc(doc(db, "parts", partId)))
+  );
+  const partCosts = new Map<string, number>();
+  partSnaps.forEach((snap) => {
+    if (snap.exists()) {
+      partCosts.set(snap.id, (snap.data() as Part).costPriceMinor ?? 0);
+    }
+  });
+
   let subtotalMinor = 0;
   const lines = activeLines.map((l) => {
     subtotalMinor += l.lineTotalMinor;
+    const costPriceMinor = l.partId ? partCosts.get(l.partId) : undefined;
     return {
       description: l.description,
       quantity: l.quantity,
       unitPriceMinor: l.unitPriceMinor,
       lineTotalMinor: l.lineTotalMinor,
+      kind: l.kind,
+      ...(l.partId ? { partId: l.partId } : {}),
+      ...(costPriceMinor !== undefined ? { costPriceMinor } : {}),
     };
   });
 
@@ -92,6 +115,11 @@ export async function generateInvoiceClient(
       taxMinor,
       totalMinor,
       amountPaidMinor: 0,
+      taxRatePercent: taxPercent,
+      extraCharges: [],
+      discountType: "percent",
+      discountValue: 0,
+      discountMinor: 0,
       lines,
       archived: false,
       createdByUid: uid,

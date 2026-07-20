@@ -87,8 +87,10 @@ export default function BillingPage() {
       .filter((i) => i.status !== "void")
       .forEach((inv) => {
         (inv.lines || []).forEach((l) => {
-          const cost = costByName.get((l.description || "").toLowerCase().trim());
-          if (cost) exp += cost * (l.quantity || 1);
+          const cost =
+            l.costPriceMinor ??
+            costByName.get((l.description || "").toLowerCase().trim());
+          if (cost !== undefined) exp += cost * (l.quantity || 1);
         });
       });
     return { expenses: exp, profit: collectedMTD - exp };

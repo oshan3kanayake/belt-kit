@@ -34,6 +34,59 @@ service cloud.firestore {
     function onlyChanged(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
     }
+    function validInvoiceState(data) {
+      return data.subtotalMinor is int && data.subtotalMinor >= 0
+             && data.taxMinor is int && data.taxMinor >= 0
+             && data.totalMinor is int && data.totalMinor > 0
+             && data.amountPaidMinor is int && data.amountPaidMinor >= 0
+             && data.amountPaidMinor <= data.totalMinor
+             && data.status in ['draft', 'issued', 'part_paid', 'paid', 'void']
+             && (data.status != 'paid'
+                 || data.amountPaidMinor == data.totalMinor)
+             && (data.status != 'part_paid'
+                 || (data.amountPaidMinor > 0
+                     && data.amountPaidMinor < data.totalMinor));
+    }
+    function validPaymentCreate() {
+      let data = request.resource.data;
+      let invoicePath = /databases/$(database)/documents/invoices/$(data.invoiceId);
+      let before = get(invoicePath).data;
+      let after = getAfter(invoicePath).data;
+      return data.keys().hasAll([
+               'branchId', 'invoiceId', 'customerId', 'amountMinor', 'method',
+               'archived', 'createdByUid', 'createdAt', 'updatedAt'
+             ])
+             && data.keys().hasOnly([
+               'branchId', 'invoiceId', 'customerId', 'customerUid',
+               'amountMinor', 'method', 'reference', 'cardLast4', 'provider',
+               'archived', 'createdByUid', 'createdAt', 'updatedAt'
+             ])
+             && data.branchId is string
+             && data.invoiceId is string
+             && data.customerId is string
+             && data.amountMinor is int && data.amountMinor > 0
+             && data.method in ['cash', 'card', 'bank_transfer', 'wallet']
+             && data.archived == false
+             && data.createdByUid == request.auth.uid
+             && data.createdAt is timestamp
+             && data.updatedAt is timestamp
+             && (!data.keys().hasAny(['reference']) || data.reference is string)
+             && (!data.keys().hasAny(['cardLast4'])
+                 || (data.cardLast4 is string && data.cardLast4.size() == 4))
+             && (!data.keys().hasAny(['provider']) || data.provider is string)
+             && exists(invoicePath)
+             && before.branchId == data.branchId
+             && before.customerId == data.customerId
+             && before.status != 'void'
+             && data.amountMinor <= before.totalMinor - before.amountPaidMinor
+             && after.diff(before).affectedKeys().hasOnly([
+               'amountPaidMinor', 'status', 'updatedByUid', 'updatedAt'
+             ])
+             && after.amountPaidMinor == before.amountPaidMinor + data.amountMinor
+             && after.status == (after.amountPaidMinor == after.totalMinor
+                 ? 'paid' : 'part_paid')
+             && validInvoiceState(after);
+    }
 
     // ---- Users -----------------------------------------------------------
     match /users/{userId} {
@@ -104,11 +157,14 @@ service cloud.firestore {
     // ---- Billing ---------------------------------------------------------
     match /invoices/{id} {
       allow read: if isStaff();
-      allow create, update, delete: if isFinance();
+      allow create, update: if isFinance()
+                            && validInvoiceState(request.resource.data);
+      allow delete: if isFinance();
     }
     match /payments/{id} {
       allow read: if isStaff();
-      allow create, delete: if isFinance();
+      allow create: if isFinance() && validPaymentCreate();
+      allow delete: if isFinance();
       allow update: if false;
     }
 

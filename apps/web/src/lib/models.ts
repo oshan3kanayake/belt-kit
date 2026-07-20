@@ -87,6 +87,13 @@ export interface Part {
 
 export type InvoiceStatus = "draft" | "issued" | "part_paid" | "paid" | "void";
 
+export type DiscountType = "percent" | "fixed";
+
+export interface ExtraCharge {
+  description: string;
+  amountMinor: number;
+}
+
 export interface Invoice {
   branchId: string;
   jobCardId: string;
@@ -97,11 +104,23 @@ export interface Invoice {
   taxMinor: number;
   totalMinor: number;
   amountPaidMinor: number;
+  /** Tax percentage frozen when the invoice is created. */
+  taxRatePercent?: number;
+  /** Optional manual charges and discount. Missing on legacy invoices. */
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  /** Percentage points for percent discounts; minor units for fixed discounts. */
+  discountValue?: number;
+  discountMinor?: number;
   lines: Array<{
     description: string;
     quantity: number;
     unitPriceMinor: number;
     lineTotalMinor: number;
+    kind?: "labor" | "part";
+    partId?: string | null;
+    /** Part cost frozen at invoice time for stable profit reporting. */
+    costPriceMinor?: number;
   }>;
   archived?: boolean;
   createdAt?: Timestamp;
@@ -114,6 +133,9 @@ export interface Payment {
   amountMinor: number;
   method: "cash" | "card" | "bank_transfer" | "wallet";
   reference?: string;
+  /** Safe display metadata only. Full card details and CVV are never stored. */
+  cardLast4?: string;
+  provider?: string;
   createdAt?: Timestamp;
 }
 
