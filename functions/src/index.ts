@@ -17,19 +17,19 @@ export { onJobCardStatusChange } from "./jobCards";
 // Billing (server-side invoice generation)
 export { generateInvoice } from "./billing";
 
+// Employee management
 export {
-createEmployee,
-updateEmployee,
-assignEmployeeRole
-}
-from "./employees/employees";
+    createEmployee,
+    updateEmployee,
+    assignEmployeeRole
+} from "./employees/employees";
+
 
 export {
-getEmployees
-}
-from "./employees/employeeList";
+    getEmployees
+} from "./employees/employeeList";
+
 
 export {
     createEmployeePayment
-}
-from "./employeePayments/employeePayments";
+} from "./employees/employeePayments";

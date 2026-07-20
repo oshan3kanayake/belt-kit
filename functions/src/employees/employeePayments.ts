@@ -17,10 +17,10 @@ const db = getFirestore();
 
 
 
-function verifyPaymentPermission(request:any)
+function verifyPaymentPermission(request: any)
 {
 
-    if(!request.auth)
+    if (!request.auth)
     {
         throw new HttpsError(
             "unauthenticated",
@@ -30,10 +30,10 @@ function verifyPaymentPermission(request:any)
 
 
     const role =
-        request.auth.token.role as Role;
+        request.auth.token.role as Role | undefined;
 
 
-    if(
+    if (
         role !== "owner" &&
         role !== "manager" &&
         role !== "accountant"
@@ -49,7 +49,7 @@ function verifyPaymentPermission(request:any)
 
 
 
-// CREATE PAYMENT
+// CREATE EMPLOYEE PAYMENT
 
 export const createEmployeePayment =
 onCall(async(request)=>{
@@ -70,16 +70,16 @@ onCall(async(request)=>{
 
 
 
-    if(
+    if (
         !employeeId ||
         !month ||
-        !amountPaidMinor ||
+        amountPaidMinor === undefined ||
         !paidDate
     )
     {
         throw new HttpsError(
             "invalid-argument",
-            "Missing payment data."
+            "employeeId, month, amountPaidMinor and paidDate are required."
         );
     }
 
@@ -90,7 +90,7 @@ onCall(async(request)=>{
 
 
 
-    if(!branchId)
+    if (!branchId)
     {
         throw new HttpsError(
             "failed-precondition",
@@ -113,11 +113,30 @@ onCall(async(request)=>{
 
 
 
-    if(!employeeSnap.exists)
+    if (!employeeSnap.exists)
     {
         throw new HttpsError(
             "not-found",
             "Employee not found."
+        );
+    }
+
+
+
+    const employee =
+        employeeSnap.data();
+
+
+
+    // Prevent cross-branch payment
+
+    if (
+        employee?.branchId !== branchId
+    )
+    {
+        throw new HttpsError(
+            "permission-denied",
+            "Cannot create payment for another branch employee."
         );
     }
 
@@ -143,10 +162,12 @@ onCall(async(request)=>{
 
 
         createdBy:
+
         request.auth!.uid,
 
 
         createdAt:
+
         FieldValue.serverTimestamp()
 
     });
@@ -157,19 +178,24 @@ onCall(async(request)=>{
 
         branchId,
 
+
         actorUid:
+
         request.auth!.uid,
 
 
         action:
+
         "employee.payment_created",
 
 
         entityType:
+
         "employeePayment",
 
 
         entityId:
+
         paymentRef.id,
 
 
@@ -192,6 +218,7 @@ onCall(async(request)=>{
         success:true,
 
         paymentId:
+
         paymentRef.id
 
     };
