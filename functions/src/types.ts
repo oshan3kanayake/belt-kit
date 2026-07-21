@@ -237,3 +237,26 @@ export interface Attendance {
 
   updatedAt?: FirebaseFirestore.Timestamp;
 }
+
+export interface Supplier {
+
+    name:string;
+
+    phone:string;
+
+    email:string;
+
+    branchId:string;
+
+}
+
+
+export interface PurchaseItem {
+
+    name:string;
+
+    quantity:number;
+
+    cost:number;
+
+}

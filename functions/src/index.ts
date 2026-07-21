@@ -54,3 +54,32 @@ export {
 export {
     getAttendanceSummary
 } from "./employees/attendanceSummary";
+
+export {
+createSupplier
+}
+from "./suppliers/supplierCreate";
+
+
+export {
+getSupplierList
+}
+from "./suppliers/supplierList";
+
+
+export {
+createPurchaseOrder
+}
+from "./suppliers/purchaseOrderCreate";
+
+
+export {
+createSupplierPayment
+}
+from "./suppliers/supplierPaymentCreate";
+
+
+export {
+getSupplierSummary
+}
+from "./suppliers/supplierSummary";
