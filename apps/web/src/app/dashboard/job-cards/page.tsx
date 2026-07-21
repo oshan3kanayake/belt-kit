@@ -13,6 +13,7 @@ import {
   Car,
   User,
   CalendarClock,
+  ArrowRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { auth } from "@/lib/firebase";
@@ -195,7 +196,7 @@ export default function JobCardsPage() {
     }
     try {
       const ref = await createDoc("jobCards", branchId, payload);
-      notify("Job card created — now add parts, labor & a technician.");
+      notify("Job card created — now add parts, labor and pricing.");
       setModalOpen(false);
       setSelectedCustomer("");
       // Take them straight into the job so it's obvious what to do next.
@@ -274,6 +275,13 @@ export default function JobCardsPage() {
         />
       </div>
 
+      {!loading && jobs.length > 0 && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-burgundy-100 bg-burgundy-50/50 px-4 py-3 text-sm text-ink-soft">
+          <ClipboardList size={16} className="shrink-0 text-burgundy-600" />
+          Select a job card to add work, set pricing and generate its invoice.
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 rounded-xl bg-burgundy-50 px-4 py-3 font-sans text-sm text-burgundy-600">
           {error}
@@ -333,7 +341,7 @@ export default function JobCardsPage() {
                   >
                     <Link
                       href={`/dashboard/job-cards/${j.id}`}
-                      className="card block p-4 transition-shadow hover:shadow-luxe"
+                      className="card block cursor-pointer p-4 transition hover:border-burgundy-300 hover:shadow-luxe focus:outline-none focus:ring-2 focus:ring-burgundy-300"
                     >
                       <p className="line-clamp-2 font-sans text-sm font-medium text-ink">
                         {j.complaint}
@@ -353,6 +361,9 @@ export default function JobCardsPage() {
                         <span className="font-sans text-sm font-semibold text-burgundy-600">
                           {formatMoney(j.totalMinor)}
                         </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs font-semibold text-burgundy-600">
+                        <span>Open job card</span><ArrowRight size={14} />
                       </div>
                     </Link>
                   </motion.div>

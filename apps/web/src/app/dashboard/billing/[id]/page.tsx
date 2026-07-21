@@ -25,8 +25,6 @@ import {
   Trash2,
   Landmark,
   Smartphone,
-  Pencil,
-  X,
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -36,11 +34,8 @@ import {
   Invoice,
   Customer,
   Payment,
-  DiscountType,
-  ExtraCharge,
 } from "@/lib/models";
 import { formatMoney, formatDateTime, toMinor } from "@/lib/format";
-import { calculateInvoiceTotals } from "@/lib/billing-calculations";
 import {
   CenterSpinner,
   EmptyState,
@@ -56,7 +51,6 @@ import {
 } from "@/components/PaymentTerminal";
 
 type PayMethod = Payment["method"];
-type EditableCharge = { description: string; amount: string };
 
 const PAYMENT_METHODS = [
   {
@@ -99,11 +93,6 @@ export default function InvoiceDetailPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>("cash");
   const [payAmountStr, setPayAmountStr] = useState("");
   const [showTerminal, setShowTerminal] = useState(false);
-  const [adjustModal, setAdjustModal] = useState(false);
-  const [charges, setCharges] = useState<EditableCharge[]>([]);
-  const [discountType, setDiscountType] = useState<DiscountType>("percent");
-  const [discountValueStr, setDiscountValueStr] = useState("0");
-  const [taxRateValueStr, setTaxRateValueStr] = useState("0");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const paymentInFlight = useRef(false);
 
@@ -114,45 +103,6 @@ export default function InvoiceDetailPage() {
   const canPay =
     role === "owner" || role === "manager" || role === "advisor" || role === "accountant";
 
-  const invoiceTaxRate = useMemo(() => {
-    if (!invoice) return 0;
-    if (typeof invoice.taxRatePercent === "number") {
-      return invoice.taxRatePercent;
-    }
-    return invoice.subtotalMinor > 0
-      ? (invoice.taxMinor / invoice.subtotalMinor) * 100
-      : 0;
-  }, [invoice]);
-
-  const editableExtraCharges = useMemo<ExtraCharge[]>(
-    () =>
-      charges.map((charge) => ({
-        description: charge.description.trim(),
-        amountMinor: toMinor(charge.amount),
-      })),
-    [charges]
-  );
-
-  const liveTotals = useMemo(
-    () =>
-      calculateInvoiceTotals({
-        baseSubtotalMinor: invoice?.subtotalMinor,
-        extraCharges: editableExtraCharges,
-        discountType,
-        discountValue:
-          discountType === "fixed"
-            ? toMinor(discountValueStr)
-            : Number(discountValueStr),
-        taxRatePercent: Number(taxRateValueStr),
-      }),
-    [
-      discountType,
-      discountValueStr,
-      editableExtraCharges,
-      invoice?.subtotalMinor,
-      taxRateValueStr,
-    ]
-  );
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "invoices", id), async (snap) => {
@@ -282,147 +232,6 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  function openAdjustModal() {
-    if (!invoice) return;
-    setCharges(
-      (invoice.extraCharges ?? []).map((charge) => ({
-        description: charge.description,
-        amount: (charge.amountMinor / 100).toFixed(2),
-      }))
-    );
-    const type = invoice.discountType ?? "percent";
-    setDiscountType(type);
-    setDiscountValueStr(
-      type === "fixed"
-        ? ((invoice.discountValue ?? 0) / 100).toFixed(2)
-        : String(invoice.discountValue ?? 0)
-    );
-    setTaxRateValueStr(String(Number(invoiceTaxRate.toFixed(4))));
-    setAdjustModal(true);
-  }
-
-  async function saveAdjustments() {
-    if (!invoice) return;
-    const invalidCharge = editableExtraCharges.some(
-      (charge) => !charge.description || charge.amountMinor <= 0
-    );
-    if (invalidCharge) {
-      notify("Every extra charge needs a description and positive amount.", "error");
-      return;
-    }
-    if (
-      !Number.isFinite(Number(discountValueStr)) ||
-      Number(discountValueStr) < 0
-    ) {
-      notify("Enter a valid discount.", "error");
-      return;
-    }
-    if (discountType === "percent" && Number(discountValueStr) > 100) {
-      notify("Percentage discounts cannot be greater than 100%.", "error");
-      return;
-    }
-    if (
-      !Number.isFinite(Number(taxRateValueStr)) ||
-      Number(taxRateValueStr) < 0 ||
-      Number(taxRateValueStr) > 100
-    ) {
-      notify("Enter a tax rate between 0% and 100%.", "error");
-      return;
-    }
-    if (
-      discountType === "fixed" &&
-      toMinor(discountValueStr) > liveTotals.adjustedSubtotalMinor
-    ) {
-      notify("The fixed discount cannot exceed the adjusted subtotal.", "error");
-      return;
-    }
-    if (liveTotals.totalMinor <= 0) {
-      notify("The discount must leave a positive invoice total.", "error");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const invoiceRef = doc(db, "invoices", id);
-      const auditRef = doc(collection(db, "auditLog"));
-      const uid = auth.currentUser?.uid ?? "unknown";
-      await runTransaction(db, async (tx) => {
-        const freshSnap = await tx.get(invoiceRef);
-        if (!freshSnap.exists()) throw new Error("Invoice no longer exists.");
-        const fresh = freshSnap.data() as Invoice;
-        if ((fresh.amountPaidMinor ?? 0) > 0 || fresh.status === "paid") {
-          throw new Error("Charges cannot be changed after a payment is recorded.");
-        }
-        if (fresh.status === "void") {
-          throw new Error("A void invoice cannot be changed.");
-        }
-
-        const totals = calculateInvoiceTotals({
-          baseSubtotalMinor: fresh.subtotalMinor,
-          extraCharges: editableExtraCharges,
-          discountType,
-          discountValue:
-            discountType === "fixed"
-              ? toMinor(discountValueStr)
-              : Number(discountValueStr),
-          taxRatePercent: Number(taxRateValueStr),
-        });
-        if (totals.totalMinor <= 0) {
-          throw new Error("The discount must leave a positive invoice total.");
-        }
-
-        tx.update(invoiceRef, {
-          extraCharges: totals.extraCharges,
-          discountType: totals.discountType,
-          discountValue: totals.discountValue,
-          discountMinor: totals.discountMinor,
-          taxRatePercent: totals.taxRatePercent,
-          taxMinor: totals.taxMinor,
-          totalMinor: totals.totalMinor,
-          updatedByUid: uid,
-          updatedAt: serverTimestamp(),
-        });
-        if (fresh.jobCardId) {
-          tx.update(doc(db, "jobCards", fresh.jobCardId), {
-            taxMinor: totals.taxMinor,
-            totalMinor: totals.totalMinor,
-            updatedByUid: uid,
-            updatedAt: serverTimestamp(),
-          });
-        }
-        tx.set(auditRef, {
-          branchId: fresh.branchId,
-          actorUid: uid,
-          action: "invoice.adjusted",
-          entityType: "invoice",
-          entityId: id,
-          before: {
-            extraCharges: fresh.extraCharges ?? [],
-            discountType: fresh.discountType ?? null,
-            discountValue: fresh.discountValue ?? 0,
-            totalMinor: fresh.totalMinor,
-          },
-          after: {
-            extraCharges: totals.extraCharges,
-            discountType: totals.discountType,
-            discountValue: totals.discountValue,
-            totalMinor: totals.totalMinor,
-          },
-          at: serverTimestamp(),
-        });
-      });
-      notify("Invoice charges and discount saved.");
-      setAdjustModal(false);
-    } catch (error) {
-      notify(
-        error instanceof Error ? error.message : "Could not update invoice.",
-        "error"
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function deleteInvoice() {
     if (!invoice) return;
     try {
@@ -458,12 +267,6 @@ export default function InvoiceDetailPage() {
     (total, charge) => total + (charge.amountMinor ?? 0),
     0
   );
-  const canAdjust =
-    canPay &&
-    (invoice.amountPaidMinor ?? 0) === 0 &&
-    invoice.status !== "paid" &&
-    invoice.status !== "void";
-
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -475,14 +278,6 @@ export default function InvoiceDetailPage() {
         </button>
         {canPay && (
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            {canAdjust && (
-              <button
-                onClick={openAdjustModal}
-                className="btn-ghost px-3 py-2 text-xs"
-              >
-                <Pencil size={15} /> Charges &amp; discount
-              </button>
-            )}
             <button
               onClick={() => setDeleteOpen(true)}
               className="btn-ghost px-3 py-2 text-xs"
@@ -628,11 +423,6 @@ export default function InvoiceDetailPage() {
               )}
             </div>
           </div>
-          {canPay && !canAdjust && invoice.amountPaidMinor > 0 && (
-            <p className="mt-5 text-right font-sans text-xs text-ink-faint">
-              Charges and discounts are locked after the first payment.
-            </p>
-          )}
         </div>
       </div>
 
@@ -773,205 +563,6 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Manual charges and discounts are editable until the first payment. */}
-      <Modal
-        open={adjustModal}
-        onClose={() => setAdjustModal(false)}
-        title="Charges and discount"
-        size="lg"
-      >
-        <div className="space-y-6">
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="font-sans text-sm font-semibold text-ink">
-                  Extra charges
-                </p>
-                <p className="font-sans text-xs text-ink-faint">
-                  Add work that was not included in the original job lines.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn-ghost px-3 py-2 text-xs"
-                onClick={() =>
-                  setCharges((current) => [
-                    ...current,
-                    { description: "", amount: "" },
-                  ])
-                }
-              >
-                <Plus size={15} /> Add extra charge
-              </button>
-            </div>
-
-            {charges.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-line bg-surface-muted/40 px-4 py-5 text-center font-sans text-sm text-ink-faint">
-                No extra charges added.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {charges.map((charge, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end"
-                  >
-                    <Field label="Description" required>
-                      <input
-                        className="input-luxe"
-                        placeholder="Special cleaning"
-                        value={charge.description}
-                        onChange={(event) =>
-                          setCharges((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, description: event.target.value }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label="Amount (LKR)" required>
-                      <input
-                        className="input-luxe"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={charge.amount}
-                        onChange={(event) =>
-                          setCharges((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, amount: event.target.value }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                    </Field>
-                    <button
-                      type="button"
-                      className="btn-ghost mb-0.5 h-10 w-10 justify-center p-0 text-rose-500"
-                      aria-label={`Remove charge ${index + 1}`}
-                      onClick={() =>
-                        setCharges((current) =>
-                          current.filter((_, itemIndex) => itemIndex !== index)
-                        )
-                      }
-                    >
-                      <X size={17} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="border-t border-line pt-5">
-            <p className="mb-3 font-sans text-sm font-semibold text-ink">
-              Discount
-            </p>
-            <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)]">
-              <div className="grid grid-cols-2 rounded-xl border border-line bg-surface-muted p-1">
-                {(["percent", "fixed"] as DiscountType[]).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => {
-                      setDiscountType(type);
-                      setDiscountValueStr("0");
-                    }}
-                    className={`rounded-lg px-4 py-2 font-sans text-sm font-medium transition ${
-                      discountType === type
-                        ? "bg-white text-burgundy-700 shadow-soft"
-                        : "text-ink-soft"
-                    }`}
-                  >
-                    {type === "percent" ? "Percent (%)" : "Fixed value"}
-                  </button>
-                ))}
-              </div>
-              <Field
-                label={discountType === "percent" ? "Percentage" : "Amount (LKR)"}
-              >
-                <input
-                  className="input-luxe"
-                  inputMode="decimal"
-                  min="0"
-                  max={discountType === "percent" ? "100" : undefined}
-                  placeholder="0"
-                  value={discountValueStr}
-                  onChange={(event) => setDiscountValueStr(event.target.value)}
-                />
-              </Field>
-            </div>
-          </div>
-
-          <div className="border-t border-line pt-5">
-            <Field
-              label="Tax rate (%)"
-              hint="This is saved with this invoice and can be changed before the first payment."
-            >
-              <input
-                className="input-luxe max-w-xs"
-                inputMode="decimal"
-                min="0"
-                max="100"
-                placeholder="0"
-                value={taxRateValueStr}
-                onChange={(event) => setTaxRateValueStr(event.target.value)}
-              />
-            </Field>
-          </div>
-
-          <div className="rounded-2xl border border-burgundy-100 bg-burgundy-50/50 p-5">
-            <p className="mb-3 font-sans text-xs font-semibold uppercase tracking-wide text-burgundy-700">
-              Live total
-            </p>
-            <div className="space-y-2 font-sans text-sm">
-              <div className="flex justify-between text-ink-soft">
-                <span>Original subtotal</span>
-                <span>{formatMoney(liveTotals.baseSubtotalMinor, invoice.currency)}</span>
-              </div>
-              <div className="flex justify-between text-ink-soft">
-                <span>Extra charges</span>
-                <span>+ {formatMoney(liveTotals.extraChargesTotalMinor, invoice.currency)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-700">
-                <span>Discount</span>
-                <span>− {formatMoney(liveTotals.discountMinor, invoice.currency)}</span>
-              </div>
-              <div className="flex justify-between text-ink-soft">
-                <span>Tax ({Number(liveTotals.taxRatePercent.toFixed(2))}%)</span>
-                <span>{formatMoney(liveTotals.taxMinor, invoice.currency)}</span>
-              </div>
-              <div className="flex justify-between border-t border-burgundy-100 pt-2 font-serif text-lg font-semibold text-burgundy-700">
-                <span>Final total</span>
-                <span>{formatMoney(liveTotals.totalMinor, invoice.currency)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => setAdjustModal(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={saveAdjustments}
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save invoice changes"}
-            </button>
-          </div>
-        </div>
       </Modal>
 
       <ConfirmDialog

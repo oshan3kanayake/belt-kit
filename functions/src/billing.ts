@@ -127,8 +127,44 @@ export const generateInvoice = onCall(async (request) => {
       };
     });
 
-    const taxMinor = Math.round(subtotalMinor * (branch.taxRatePercent / 100));
-    const totalMinor = subtotalMinor + taxMinor;
+    const taxRatePercent =
+      typeof job.taxRatePercent === "number" &&
+      Number.isFinite(job.taxRatePercent) &&
+      job.taxRatePercent >= 0 &&
+      job.taxRatePercent <= 100
+        ? job.taxRatePercent
+        : branch.taxRatePercent;
+    const extraCharges = Array.isArray(job.extraCharges)
+      ? job.extraCharges
+          .filter(
+            (charge) =>
+              typeof charge?.description === "string" &&
+              Number.isFinite(charge?.amountMinor) &&
+              charge.amountMinor > 0
+          )
+          .map((charge) => ({
+            description: charge.description.trim(),
+            amountMinor: Math.round(charge.amountMinor),
+          }))
+      : [];
+    const extraChargesTotal = extraCharges.reduce(
+      (total, charge) => total + charge.amountMinor,
+      0
+    );
+    const adjustedSubtotal = subtotalMinor + extraChargesTotal;
+    const discountType = job.discountType === "percent" ? "percent" : "fixed";
+    const rawDiscount = Number.isFinite(job.discountValue) && job.discountValue! > 0
+      ? job.discountValue!
+      : 0;
+    const discountMinor = Math.min(
+      adjustedSubtotal,
+      discountType === "percent"
+        ? Math.round(adjustedSubtotal * (Math.min(100, rawDiscount) / 100))
+        : Math.round(rawDiscount)
+    );
+    const taxableSubtotal = adjustedSubtotal - discountMinor;
+    const taxMinor = Math.round(taxableSubtotal * (taxRatePercent / 100));
+    const totalMinor = taxableSubtotal + taxMinor;
 
     const invoiceRef = db.collection("invoices").doc();
     tx.set(invoiceRef, {
@@ -141,11 +177,11 @@ export const generateInvoice = onCall(async (request) => {
       taxMinor,
       totalMinor,
       amountPaidMinor: 0,
-      taxRatePercent: branch.taxRatePercent,
-      extraCharges: [],
-      discountType: "percent",
-      discountValue: 0,
-      discountMinor: 0,
+      taxRatePercent,
+      extraCharges,
+      discountType,
+      discountValue: discountType === "percent" ? Math.min(100, rawDiscount) : Math.round(rawDiscount),
+      discountMinor,
       lines,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

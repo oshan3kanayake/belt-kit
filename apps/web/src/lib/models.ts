@@ -51,6 +51,12 @@ export interface JobCard {
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
+  /** Pricing choices made on the job card before its invoice is generated. */
+  taxRatePercent?: number;
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  discountValue?: number;
+  discountMinor?: number;
   invoiceId?: string | null;
   /** Optional planned service date (for the dashboard calendar). */
   scheduledDate?: Timestamp | null;

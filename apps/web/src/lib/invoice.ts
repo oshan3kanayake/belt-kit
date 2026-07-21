@@ -27,6 +27,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { JobCard, JobCardLine, Branch, Part } from "./models";
+import { calculateInvoiceTotals } from "./billing-calculations";
 
 interface BranchDoc extends Branch {}
 
@@ -57,7 +58,13 @@ export async function generateInvoiceClient(
     throw new Error("Set a valid branch tax rate between 0% and 100% before invoicing.");
   }
   const currency = branch.currency || "LKR";
-  const taxPercent = branch.taxRatePercent;
+  const taxPercent =
+    typeof job.taxRatePercent === "number" &&
+    Number.isFinite(job.taxRatePercent) &&
+    job.taxRatePercent >= 0 &&
+    job.taxRatePercent <= 100
+      ? job.taxRatePercent
+      : branch.taxRatePercent;
 
   // Lines for this job card.
   const linesSnap = await getDocs(
@@ -104,8 +111,13 @@ export async function generateInvoiceClient(
     };
   });
 
-  const taxMinor = Math.round(subtotalMinor * (taxPercent / 100));
-  const totalMinor = subtotalMinor + taxMinor;
+  const totals = calculateInvoiceTotals({
+    baseSubtotalMinor: subtotalMinor,
+    extraCharges: job.extraCharges,
+    discountType: job.discountType,
+    discountValue: job.discountValue,
+    taxRatePercent: taxPercent,
+  });
   const uid = auth.currentUser?.uid ?? "unknown";
 
   // Atomic: create the invoice and link it back onto the job card together.
@@ -122,14 +134,14 @@ export async function generateInvoiceClient(
       status: "issued",
       currency,
       subtotalMinor,
-      taxMinor,
-      totalMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
       amountPaidMinor: 0,
-      taxRatePercent: taxPercent,
-      extraCharges: [],
-      discountType: "percent",
-      discountValue: 0,
-      discountMinor: 0,
+      taxRatePercent: totals.taxRatePercent,
+      extraCharges: totals.extraCharges,
+      discountType: totals.discountType,
+      discountValue: totals.discountValue,
+      discountMinor: totals.discountMinor,
       lines,
       archived: false,
       createdByUid: uid,
@@ -139,8 +151,8 @@ export async function generateInvoiceClient(
     tx.update(jobRef, {
       invoiceId: invoiceRef.id,
       subtotalMinor,
-      taxMinor,
-      totalMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
       updatedAt: serverTimestamp(),
     });
   });

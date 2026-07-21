@@ -161,8 +161,12 @@ service cloud.firestore {
     // ---- Billing ---------------------------------------------------------
     match /invoices/{id} {
       allow read: if isStaff();
-      allow create, update: if isFinance()
-                            && validInvoiceState(request.resource.data);
+      allow create: if isFinance() && validInvoiceState(request.resource.data);
+      // Generated invoice amounts are immutable. Payment recording may only
+      // update the balance and payment status in its atomic transaction.
+      allow update: if isFinance()
+                    && validInvoiceState(request.resource.data)
+                    && onlyChanged(['amountPaidMinor', 'status', 'updatedByUid', 'updatedAt']);
       allow delete: if isFinance();
     }
     match /payments/{id} {

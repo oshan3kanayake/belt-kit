@@ -99,6 +99,12 @@ export interface JobCard extends BaseDoc {
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
+  /** Pricing choices made on the job card before its invoice is generated. */
+  taxRatePercent?: number;
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  discountValue?: number;
+  discountMinor?: number;
   invoiceId?: string | null; // set once an invoice is generated
 }
 
