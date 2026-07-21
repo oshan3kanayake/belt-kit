@@ -218,3 +218,22 @@ export interface EmployeePayment extends BaseDoc {
     // Optional note
     note?: string;
 }
+
+export type AttendanceStatus =
+  | "PRESENT"
+  | "ON_LEAVE";
+
+
+export interface Attendance {
+  id: string;
+
+  employeeId: string;
+
+  date: string;
+
+  status: AttendanceStatus;
+
+  createdAt?: FirebaseFirestore.Timestamp;
+
+  updatedAt?: FirebaseFirestore.Timestamp;
+}

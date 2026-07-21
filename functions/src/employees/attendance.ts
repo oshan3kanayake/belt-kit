@@ -1,34 +1,12 @@
-/**
- * BELT-KIT — Employee Attendance Management
- *
- * Handles:
- * - Creating employee attendance records
- * - Permission validation
- * - Audit logging
- */
-
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
-import {
-    getFirestore,
-    FieldValue
-} from "firebase-admin/firestore";
-
-import {
-    writeAudit
-} from "../audit";
-
-import {
-    Role
-} from "../types";
+import { writeAudit } from "../audit";
+import { Role } from "../types";
 
 
 const db = getFirestore();
 
-
-// ------------------------------------------------
-// Types
-// ------------------------------------------------
 
 type AttendanceStatus =
     | "present"
@@ -43,40 +21,40 @@ interface AttendanceData {
 
     status: AttendanceStatus;
 
+    note?: string;
+
 }
 
 
+// ------------------------------------
+// Permission
+// ------------------------------------
 
-// ------------------------------------------------
-// Permission check
-// ------------------------------------------------
-
-function verifyAttendanceManager(request: any) {
+function verifyAttendanceManager(request:any) {
 
 
     if (!request.auth) {
 
         throw new HttpsError(
             "unauthenticated",
-            "User is not authenticated"
+            "Authentication required"
         );
 
     }
 
 
     const role =
-        request.auth.token.role as Role | undefined;
-
+        request.auth.token.role as Role;
 
 
     if (
         role !== "owner" &&
         role !== "manager"
-    ) {
+    ){
 
         throw new HttpsError(
             "permission-denied",
-            "Only owner or manager can manage attendance"
+            "Only owner or manager allowed"
         );
 
     }
@@ -84,10 +62,9 @@ function verifyAttendanceManager(request: any) {
 }
 
 
-
-// ------------------------------------------------
+// ------------------------------------
 // CREATE ATTENDANCE
-// ------------------------------------------------
+// ------------------------------------
 
 export const createAttendance = onCall(
 async(request)=>{
@@ -103,40 +80,23 @@ async(request)=>{
 
 
     const {
-
         employeeId,
-
         date,
-
-        status
-
+        status,
+        note
     } = data;
 
 
 
-    if (
+    if(
         !employeeId ||
         !date ||
         !status
-    ) {
+    ){
 
         throw new HttpsError(
             "invalid-argument",
             "Missing attendance data"
-        );
-
-    }
-
-
-
-    if (
-        status !== "present" &&
-        status !== "on_leave"
-    ) {
-
-        throw new HttpsError(
-            "invalid-argument",
-            "Invalid attendance status"
         );
 
     }
@@ -148,28 +108,23 @@ async(request)=>{
 
 
 
-    if (!branchId) {
-
-        throw new HttpsError(
-            "failed-precondition",
-            "Branch not found"
-        );
-
-    }
+    const role =
+        request.auth!.token.role;
 
 
 
-    // Check employee exists
-
-    const employeeSnapshot =
-        await db
-        .collection("users")
-        .doc(employeeId)
-        .get();
+    const employeeRef =
+        db.collection("users")
+        .doc(employeeId);
 
 
 
-    if (!employeeSnapshot.exists) {
+    const employeeSnap =
+        await employeeRef.get();
+
+
+
+    if(!employeeSnap.exists){
 
         throw new HttpsError(
             "not-found",
@@ -181,15 +136,15 @@ async(request)=>{
 
 
     const employee =
-        employeeSnapshot.data();
+        employeeSnap.data();
 
 
 
-    // Prevent cross branch access
-
-    if (
+    // Manager branch isolation
+    if(
+        role === "manager" &&
         employee?.branchId !== branchId
-    ) {
+    ){
 
         throw new HttpsError(
             "permission-denied",
@@ -202,66 +157,100 @@ async(request)=>{
 
     const attendanceRef =
         db.collection("attendance")
-        .doc();
+        .doc(
+            `${employeeId}_${date}`
+        );
 
 
 
-    await attendanceRef.set({
+    const existing =
+        await attendanceRef.get();
+
+
+
+    const attendanceData = {
+
 
         employeeId,
 
-        branchId,
+        branchId:
+            employee?.branchId,
+
 
         date,
 
         status,
 
-
-        createdAt:
-        FieldValue.serverTimestamp(),
-
-
-        createdByUid:
-        request.auth!.uid,
+        note: note || "",
 
 
         updatedAt:
-        FieldValue.serverTimestamp()
+            FieldValue.serverTimestamp()
 
-    });
+
+    };
+
+
+
+    if(existing.exists){
+
+
+        await attendanceRef.update(
+            attendanceData
+        );
+
+
+    }
+    else{
+
+
+        await attendanceRef.set({
+
+            ...attendanceData,
+
+
+            createdAt:
+                FieldValue.serverTimestamp(),
+
+
+            createdByUid:
+                request.auth!.uid
+
+        });
+
+
+    }
 
 
 
     await writeAudit({
 
-        branchId,
+        branchId:
+            employee?.branchId,
 
 
         actorUid:
-        request.auth!.uid,
+            request.auth!.uid,
 
 
         action:
-        "attendance.created",
+            existing.exists
+            ?
+            "attendance.updated"
+            :
+            "attendance.created",
 
 
         entityType:
-        "attendance",
+            "attendance",
 
 
         entityId:
-        attendanceRef.id,
+            attendanceRef.id,
 
 
-        after: {
-
-            employeeId,
-
-            date,
-
-            status
-
-        }
+        after:
+            attendanceData
 
     });
 
@@ -272,7 +261,7 @@ async(request)=>{
         success:true,
 
         attendanceId:
-        attendanceRef.id
+            attendanceRef.id
 
     };
 
