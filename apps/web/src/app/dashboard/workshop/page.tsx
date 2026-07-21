@@ -11,8 +11,6 @@ import {
   Edit2,
   Search,
   Kanban,
-  LayoutGrid,
-  List,
   ChevronRight,
   Wrench,
   Loader2,
@@ -35,6 +33,7 @@ import {
   Modal,
   useToast,
   Field,
+  PageHeader,
 } from "@/components/ui";
 
 /* ── Status column accent colors ──────────────────────────────────────── */
@@ -123,38 +122,26 @@ export default function WorkshopBoardPage() {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-burgundy-600 to-burgundy-800 text-white shadow-md">
-              <Kanban size={22} />
+      {/* ── Header (matches other pages) ──────────────────────────────── */}
+      <PageHeader
+        eyebrow="Workshop"
+        title="Workshop Board"
+        icon={Kanban}
+        action={
+          <div className="relative w-full sm:w-72">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
+              <Search size={15} />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-ink">
-                Workshop Board
-              </h1>
-              <p className="mt-0.5 text-sm text-ink-soft">
-                {totalActive} active vehicle{totalActive !== 1 ? "s" : ""} across all bays
-              </p>
-            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search vehicle, plate, customer…"
+              className="input-luxe pl-10 text-sm"
+            />
           </div>
-        </div>
-
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint">
-            <Search size={15} />
-          </div>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search vehicle, plate, customer…"
-            className="input-luxe pl-10 text-sm"
-          />
-        </div>
-      </div>
+        }
+      />
 
       {/* ── Status Summary Chips ───────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
