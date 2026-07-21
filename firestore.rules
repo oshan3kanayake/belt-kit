@@ -71,22 +71,16 @@ service cloud.firestore {
 
     // ---- Job Cards -------------------------------------------------------
     match /jobCards/{id} {
-      allow read: if isStaff();
-      allow create: if isOps();
-      allow update: if isOps()
-                    || (myRole() == 'technician'
-                        && onlyChanged(['status', 'photos', 'odometerReading', 'fuelLevel',
-                                        'existingDamage', 'delayNote', 'updatedAt', 'updatedByUid']))
-                    || (myRole() == 'accountant'
-                        && onlyChanged(['invoiceId', 'subtotalMinor', 'taxMinor',
-                                        'totalMinor', 'updatedAt', 'updatedByUid']));
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
       allow delete: if isOps();
     }
 
     // ---- Job card lines --------------------------------------------------
     match /jobCardLines/{id} {
-      allow read: if isStaff();
-      allow create, update: if isOps() || myRole() == 'technician';
+      allow read: if signedIn();
+      allow create, update: if signedIn();
       allow delete: if isOps();
     }
 

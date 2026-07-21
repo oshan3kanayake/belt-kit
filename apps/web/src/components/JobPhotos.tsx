@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Camera, Upload, Trash2, Maximize2, Image as ImageIcon, Loader2 } from "lucide-react";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase";
 import { updateDocById } from "@/lib/db-write";
 import { JobCard } from "@/lib/models";
 import { useToast, Modal } from "@/components/ui";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface JobPhotosProps {
   job: JobCard;
@@ -14,65 +14,51 @@ interface JobPhotosProps {
   canEdit: boolean;
 }
 
-/** Resize and compress client image to a lightweight JPEG Data URL (~60-120 KB) */
-function compressImageToDataUrl(file: File): Promise<string> {
+/**
+ * Compress an image file to a small JPEG data URL.
+ * Target: ~50-80KB so multiple photos fit within Firestore's 1MB doc limit.
+ */
+function compressToDataUrl(file: File, maxDim = 800, quality = 0.6): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.onload = () => {
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let { width, height } = img;
-        const maxDim = 1000;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      img.onerror = () => {
+        // If image decode fails, return the raw data URL
+        resolve(reader.result as string);
       };
-      img.onerror = () => reject(new Error("Failed to load image for compression"));
-      img.src = e.target?.result as string;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(reader.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve(dataUrl);
+        } catch {
+          resolve(reader.result as string);
+        }
+      };
+      img.src = reader.result as string;
     };
-    reader.onerror = () => reject(new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
-}
-
-/** Upload to Firebase Storage with automatic fallback to compressed Data URL if network/CORS blocks */
-async function uploadPhotoWithFallback(
-  jobId: string,
-  category: "before" | "after",
-  file: File
-): Promise<string> {
-  const compressedDataUrl = await compressImageToDataUrl(file);
-  try {
-    const time = Date.now();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const storagePath = `job-photos/${jobId}/${category}/${time}_${safeName}`;
-    const storageRef = ref(storage, storagePath);
-
-    // Timeout after 3.5 seconds if cloud storage hangs or blocks CORS
-    const uploadPromise = uploadBytes(storageRef, file).then(() =>
-      getDownloadURL(storageRef)
-    );
-    const timeoutPromise = new Promise<string>((_, reject) =>
-      setTimeout(() => reject(new Error("Firebase Storage timeout")), 3500)
-    );
-
-    return await Promise.race([uploadPromise, timeoutPromise]);
-  } catch (err) {
-    console.warn("Storage upload fallback activated:", err);
-    return compressedDataUrl;
-  }
 }
 
 export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
@@ -83,6 +69,35 @@ export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
   const beforePhotos = job.photos?.before || [];
   const afterPhotos = job.photos?.after || [];
 
+  async function savePhotos(
+    category: "before" | "after",
+    updatedList: string[]
+  ) {
+    const photosPayload = {
+      photos: {
+        before: category === "before" ? updatedList : (job.photos?.before || []),
+        after: category === "after" ? updatedList : (job.photos?.after || []),
+      },
+    };
+
+    // Try primary updateDocById first
+    try {
+      await updateDocById("jobCards", jobId, photosPayload);
+      return;
+    } catch (err) {
+      console.warn("updateDocById failed, trying setDoc merge:", err);
+    }
+
+    // Fallback: direct setDoc with merge
+    try {
+      await setDoc(doc(db, "jobCards", jobId), photosPayload, { merge: true });
+      return;
+    } catch (err) {
+      console.error("setDoc merge also failed:", err);
+      throw err;
+    }
+  }
+
   async function handleFileUpload(
     category: "before" | "after",
     files: FileList | null
@@ -90,37 +105,34 @@ export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
     if (!files || files.length === 0 || !canEdit) return;
     setUploadingCategory(category);
 
-    const uploadedUrls: string[] = [];
-
     try {
+      const newUrls: string[] = [];
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
+
         if (file.size > 10 * 1024 * 1024) {
-          notify(`File ${file.name} is too large (> 10MB).`, "error");
+          notify(`File ${file.name} is too large (> 10MB). Skipped.`, "error");
           continue;
         }
 
-        const photoUrl = await uploadPhotoWithFallback(jobId, category, file);
-        uploadedUrls.push(photoUrl);
+        // Compress image client-side and store as data URL directly in Firestore.
+        // This avoids Firebase Storage CORS/auth issues entirely.
+        const dataUrl = await compressToDataUrl(file);
+        newUrls.push(dataUrl);
       }
 
-      if (uploadedUrls.length > 0) {
-        const currentCategoryPhotos = category === "before" ? beforePhotos : afterPhotos;
-        const updatedList = [...currentCategoryPhotos, ...uploadedUrls];
+      if (newUrls.length > 0) {
+        const currentPhotos = category === "before" ? beforePhotos : afterPhotos;
+        const updatedList = [...currentPhotos, ...newUrls];
 
-        await updateDocById("jobCards", jobId, {
-          photos: {
-            before: category === "before" ? updatedList : beforePhotos,
-            after: category === "after" ? updatedList : afterPhotos,
-          },
-        });
-
-        notify(`Added ${uploadedUrls.length} photo(s) to ${category} section.`);
+        await savePhotos(category, updatedList);
+        notify(`Added ${newUrls.length} photo(s) to ${category} section.`);
       }
     } catch (err: unknown) {
-      console.error(err);
-      notify("Failed to save photo(s).", "error");
+      console.error("Photo upload error:", err);
+      const msg = err instanceof Error ? err.message : "Failed to save photo(s).";
+      notify(msg, "error");
     } finally {
       setUploadingCategory(null);
     }
@@ -129,16 +141,9 @@ export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
   async function handleDeletePhoto(category: "before" | "after", urlToDelete: string) {
     if (!canEdit) return;
     try {
-      const currentCategoryPhotos = category === "before" ? beforePhotos : afterPhotos;
-      const updatedList = currentCategoryPhotos.filter((url) => url !== urlToDelete);
-
-      await updateDocById("jobCards", jobId, {
-        photos: {
-          before: category === "before" ? updatedList : beforePhotos,
-          after: category === "after" ? updatedList : afterPhotos,
-        },
-      });
-
+      const currentPhotos = category === "before" ? beforePhotos : afterPhotos;
+      const updatedList = currentPhotos.filter((url) => url !== urlToDelete);
+      await savePhotos(category, updatedList);
       notify("Photo removed.");
     } catch {
       notify("Could not remove photo.", "error");

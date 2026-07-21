@@ -119,10 +119,7 @@ export default function JobCardDetailPage() {
     role === "owner" || role === "manager" || role === "advisor" || role === "accountant";
   const isTech = role === "technician";
   const canAssign = role === "owner" || role === "manager" || role === "advisor";
-  const isAssignedTech =
-    isTech && !!job &&
-    (job.assignedTechnicianIds || []).includes(auth.currentUser?.uid ?? "__none__");
-  const canEditLines = canEditJob || isAssignedTech;
+  const canEditLines = canEditJob || isTech;
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "jobCards", id), async (snap) => {
