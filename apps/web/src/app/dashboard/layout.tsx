@@ -20,6 +20,7 @@ import {
   Zap,
   ChevronRight,
   CalendarCheck2,
+  Truck,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
@@ -42,6 +43,7 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/billing",    label: "Billing",       icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/employees",  label: "Employees",     icon: UserCog,         roles: ["owner","manager"] },
   { href: "/dashboard/employees/attendance", label: "Attendance", icon: CalendarCheck2, roles: ["owner","manager"] },
+  { href: "/dashboard/suppliers",  label: "Suppliers",     icon: Truck,           roles: ["owner","manager"] },
   { href: "/dashboard/users",      label: "Users & Roles", icon: UserCog,         roles: ["owner","manager"] },
 ];
 
