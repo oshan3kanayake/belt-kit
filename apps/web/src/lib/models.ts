@@ -42,18 +42,36 @@ export type JobStatus =
   | "delivered";
 
 export interface JobCard {
+  id?: string;
   branchId: string;
   customerId: string;
   vehicleId: string;
   complaint: string;
   status: JobStatus;
   assignedTechnicianIds: string[];
+  serviceTypeIds?: string[];
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
   invoiceId?: string | null;
   /** Optional planned service date (for the dashboard calendar). */
   scheduledDate?: Timestamp | null;
+  startDate?: Timestamp | null;
+  promisedEndDate?: Timestamp | null;
+  actualEndDate?: Timestamp | null;
+  odometerReading?: number | null;
+  fuelLevel?: "Empty" | "Quarter" | "Half" | "Full" | string | null;
+  existingDamage?: {
+    scratches?: boolean;
+    dents?: boolean;
+    crackedGlass?: boolean;
+    notes?: string;
+  } | null;
+  photos?: {
+    before?: string[];
+    after?: string[];
+  } | null;
+  delayNote?: string | null;
   archived?: boolean;
   createdAt?: Timestamp;
 }
