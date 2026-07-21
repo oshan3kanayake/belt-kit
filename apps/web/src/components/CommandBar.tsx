@@ -21,6 +21,7 @@ import {
   CornerDownLeft,
   ArrowUp,
   ArrowDown,
+  Bot,
 } from "lucide-react";
 import { useCollection } from "@/lib/useCollection";
 import { Customer, Vehicle, JobCard, Invoice } from "@/lib/models";
@@ -75,6 +76,9 @@ export function CommandBar() {
       { id: "n-cust", label: "Customers", icon: Users, href: "/dashboard/customers", group: "Go to" },
       { id: "n-veh", label: "Vehicles", icon: Car, href: "/dashboard/vehicles", group: "Go to" },
       { id: "n-inv", label: "Inventory", icon: Package, href: "/dashboard/inventory", group: "Go to" },
+      ...(role === "technician"
+        ? [{ id: "n-ai", label: "Technician Assistant", icon: Bot, href: "/dashboard/technician-assistant", group: "Go to" }]
+        : []),
       { id: "n-bill", label: "Billing", icon: Receipt, href: "/dashboard/billing", group: "Go to" },
       ...(canViewReports(role)
         ? [{ id: "n-reports", label: "Reports", icon: BarChart3, href: "/dashboard/reports", group: "Go to" }]

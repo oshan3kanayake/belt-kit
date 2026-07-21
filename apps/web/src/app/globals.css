@@ -148,4 +148,21 @@ body {
   .trend-down { @apply inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-600; }
   .trend-flat { @apply inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500; }
 
+  .thinking-progress {
+    width: 42%;
+    animation: assistant-progress 2.4s ease-in-out infinite;
+  }
+  .thinking-dots { display: inline-block; width: 1.2em; overflow: hidden; animation: assistant-dots 1.2s steps(4, end) infinite; }
+
+}
+
+@keyframes assistant-progress {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(120%); }
+  100% { transform: translateX(260%); }
+}
+
+@keyframes assistant-dots {
+  0% { width: 0; }
+  100% { width: 1.2em; }
 }

@@ -28,7 +28,7 @@ const READABLE: Record<Role, string[]> = {
     "parts", "stockMovements", "invoices", "payments", "users",
     "branches", "auditLog",
   ],
-  technician: ["jobCards", "jobCardLines", "parts", "branches"],
+  technician: ["jobCards", "jobCardLines", "vehicles", "parts", "branches", "assistantChats", "assistantMessages"],
   accountant: [
     "jobCards", "jobCardLines", "customers", "vehicles",
     "parts", "invoices", "payments", "branches", "auditLog",

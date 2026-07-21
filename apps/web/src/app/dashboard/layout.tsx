@@ -20,6 +20,7 @@ import {
   Command,
   Zap,
   ChevronRight,
+  Bot,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
@@ -36,6 +37,7 @@ type NavItem = {
 const CORE_NAV: NavItem[] = [
   { href: "/dashboard",            label: "Overview",      icon: LayoutDashboard, roles: ["owner","manager","advisor","technician","accountant"] },
   { href: "/dashboard/job-cards",  label: "Job Cards",     icon: ClipboardList,   roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/technician-assistant", label: "Technician Assistant", icon: Bot, roles: ["technician"] },
   { href: "/dashboard/customers",  label: "Customers",     icon: Users,           roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/vehicles",   label: "Vehicles",      icon: Car,             roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/inventory",  label: "Inventory",     icon: Package,         roles: ["owner","manager","advisor"] },

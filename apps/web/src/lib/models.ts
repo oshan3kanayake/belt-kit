@@ -91,6 +91,57 @@ export interface Part {
   createdAt?: Timestamp;
 }
 
+export interface StockMovement {
+  branchId: string;
+  partId: string;
+  delta: number;
+  reason: "job_use" | "purchase" | "adjustment" | "return";
+  jobCardId?: string | null;
+  archived?: boolean;
+  createdAt?: Timestamp;
+}
+
+export type AssistantMessageRole = "user" | "assistant";
+
+export interface AssistantAnswer {
+  summary: string;
+  urgency: "routine" | "soon" | "stop_and_inspect";
+  likelyCauses: string[];
+  nextChecks: string[];
+  toolsOrParts: string[];
+  safetyWarning: string | null;
+  followUpQuestion: string;
+}
+
+export interface AssistantChat {
+  branchId: string;
+  ownerUid: string;
+  title: string;
+  lastMessagePreview?: string;
+  updatedAt?: Timestamp;
+  createdAt?: Timestamp;
+  archived?: boolean;
+}
+
+export interface AssistantAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+  /** Stored metadata only; the file content is sent to Ollama per request. */
+}
+
+export interface AssistantMessage {
+  branchId: string;
+  chatId: string;
+  ownerUid: string;
+  role: AssistantMessageRole;
+  content: string;
+  answer?: AssistantAnswer;
+  sources?: string[];
+  attachments?: AssistantAttachment[];
+  createdAt?: Timestamp;
+}
+
 export type InvoiceStatus = "draft" | "issued" | "part_paid" | "paid" | "void";
 
 export type DiscountType = "percent" | "fixed";

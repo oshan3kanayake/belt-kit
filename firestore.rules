@@ -183,6 +183,23 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---- Technician Assistant ------------------------------------------
+    // Conversations belong to the signed-in staff member and are not shared
+    // across accounts. The model never writes these records directly.
+    match /assistantChats/{id} {
+      allow read: if myRole() == 'technician' && resource.data.ownerUid == request.auth.uid;
+      allow create: if myRole() == 'technician' && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if myRole() == 'technician'
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if false;
+    }
+    match /assistantMessages/{id} {
+      allow read: if myRole() == 'technician' && resource.data.ownerUid == request.auth.uid;
+      allow create: if myRole() == 'technician' && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
