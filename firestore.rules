@@ -75,7 +75,8 @@ service cloud.firestore {
       allow create: if isOps();
       allow update: if isOps()
                     || (myRole() == 'technician'
-                        && onlyChanged(['status', 'updatedAt', 'updatedByUid']))
+                        && onlyChanged(['status', 'photos', 'odometerReading', 'fuelLevel',
+                                        'existingDamage', 'delayNote', 'updatedAt', 'updatedByUid']))
                     || (myRole() == 'accountant'
                         && onlyChanged(['invoiceId', 'subtotalMinor', 'taxMinor',
                                         'totalMinor', 'updatedAt', 'updatedByUid']));

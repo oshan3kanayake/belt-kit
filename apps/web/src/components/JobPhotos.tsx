@@ -14,6 +14,67 @@ interface JobPhotosProps {
   canEdit: boolean;
 }
 
+/** Resize and compress client image to a lightweight JPEG Data URL (~60-120 KB) */
+function compressImageToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        const maxDim = 1000;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.onerror = () => reject(new Error("Failed to load image for compression"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Upload to Firebase Storage with automatic fallback to compressed Data URL if network/CORS blocks */
+async function uploadPhotoWithFallback(
+  jobId: string,
+  category: "before" | "after",
+  file: File
+): Promise<string> {
+  const compressedDataUrl = await compressImageToDataUrl(file);
+  try {
+    const time = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `job-photos/${jobId}/${category}/${time}_${safeName}`;
+    const storageRef = ref(storage, storagePath);
+
+    // Timeout after 3.5 seconds if cloud storage hangs or blocks CORS
+    const uploadPromise = uploadBytes(storageRef, file).then(() =>
+      getDownloadURL(storageRef)
+    );
+    const timeoutPromise = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("Firebase Storage timeout")), 3500)
+    );
+
+    return await Promise.race([uploadPromise, timeoutPromise]);
+  } catch (err) {
+    console.warn("Storage upload fallback activated:", err);
+    return compressedDataUrl;
+  }
+}
+
 export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
   const { notify } = useToast();
   const [uploadingCategory, setUploadingCategory] = useState<"before" | "after" | null>(null);
@@ -35,20 +96,13 @@ export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Basic size check (keep under 5MB per photo for demo/free tier efficiency)
-        if (file.size > 5 * 1024 * 1024) {
-          notify(`File ${file.name} is too large (> 5MB). Please choose a smaller image.`, "error");
+        if (file.size > 10 * 1024 * 1024) {
+          notify(`File ${file.name} is too large (> 10MB).`, "error");
           continue;
         }
 
-        const time = Date.now();
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `job-photos/${jobId}/${category}/${time}_${safeName}`;
-        const storageRef = ref(storage, storagePath);
-
-        await uploadBytes(storageRef, file);
-        const downloadUrl = await getDownloadURL(storageRef);
-        uploadedUrls.push(downloadUrl);
+        const photoUrl = await uploadPhotoWithFallback(jobId, category, file);
+        uploadedUrls.push(photoUrl);
       }
 
       if (uploadedUrls.length > 0) {
@@ -62,11 +116,11 @@ export function JobPhotos({ job, jobId, canEdit }: JobPhotosProps) {
           },
         });
 
-        notify(`Uploaded ${uploadedUrls.length} photo(s) to ${category} section.`);
+        notify(`Added ${uploadedUrls.length} photo(s) to ${category} section.`);
       }
     } catch (err: unknown) {
       console.error(err);
-      notify("Failed to upload photo(s) to Storage.", "error");
+      notify("Failed to save photo(s).", "error");
     } finally {
       setUploadingCategory(null);
     }
@@ -191,7 +245,7 @@ function PhotoSection({
           {canEdit && (
             <label
               htmlFor={inputId}
-              className={`btn-ghost py-1 px-3 text-xs ${
+              className={`btn-ghost py-1 px-3 text-xs cursor-pointer ${
                 uploading ? "pointer-events-none opacity-50" : ""
               }`}
             >
