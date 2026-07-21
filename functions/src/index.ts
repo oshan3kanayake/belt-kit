@@ -41,3 +41,8 @@ export {
 export {
     getEmployeePaymentHistory
 } from "./employees/employeePaymentHistory";
+
+// Employee attendance
+export {
+    createAttendance
+} from "./employees/attendance";
