@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect  } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -22,11 +22,13 @@ import {
   JobCard,
   Customer,
   Vehicle,
+  ServiceType,
   JobStatus,
   JOB_STATUS_META,
   JOB_STATUS_ORDER,
 } from "@/lib/models";
 import { formatMoney, formatDate } from "@/lib/format";
+
 import {
   PageHeader,
   Modal,
@@ -45,14 +47,34 @@ export default function JobCardsPage() {
   const { branchId, role } = useAuth();
   const router = useRouter();
   const { data: allJobs, loading, error } = useCollection<JobCard>("jobCards");
-  const jobs =
-    role === "technician"
-      ? allJobs.filter((j) =>
-          (j.assignedTechnicianIds || []).includes(auth.currentUser?.uid ?? "")
-        )
-      : allJobs;
+const jobs =
+(
+  role === "technician"
+    ? allJobs.filter((j) =>
+        (j.assignedTechnicianIds || []).includes(auth.currentUser?.uid ?? "")
+      )
+    : allJobs
+).filter(
+  (j) => j.status !== "delivered" && !j.archived
+);
   const { data: customers } = useCollection<Customer>("customers");
   const { data: vehicles } = useCollection<Vehicle>("vehicles");
+  const { data: services } = useCollection<ServiceType>("services");
+  const { data: technicians } = useCollection<any>("users");
+
+  const availableTechnicians = technicians.filter(
+  (u) =>
+    u.role === "technician" &&
+    !u.archived
+);
+const technicianJobCount = (technicianId: string) => {
+  return jobs.filter(
+    (job) =>
+      job.assignedTechnicianIds?.includes(technicianId) &&
+      job.status !== "delivered" &&
+      !job.archived
+  ).length;
+};
   const { notify } = useToast();
 
   const [view, setView] = useState<"board" | "list">("board");
@@ -61,6 +83,14 @@ export default function JobCardsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+const [serviceOpen, setServiceOpen] = useState(false);
+
+const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
+const [technicianOpen, setTechnicianOpen] = useState(false);
+
+const [startDate, setStartDate] = useState("");
+const [promisedDate, setPromisedDate] = useState("");
 
   const canCreate = role === "owner" || role === "manager" || role === "advisor";
 
@@ -70,6 +100,18 @@ export default function JobCardsPage() {
     const v = vehicles.find((x) => x.id === id);
     return v ? `${v.make} ${v.model} · ${v.plateNumber}` : "—";
   };
+  const serviceNames = (ids:string[]) =>
+    
+ services
+ .filter(s=>ids?.includes(s.id))
+ .map(s=>s.name)
+ .join(", ");
+
+ const technicianNames = (ids: string[] = []) =>
+  technicians
+    .filter((t) => ids.includes(t.id))
+    .map((t) => t.displayName || t.email)
+    .join(", ");
 
   const modalVehicles = useMemo(
     () => vehicles.filter((v) => v.customerId === selectedCustomer),
@@ -143,6 +185,56 @@ export default function JobCardsPage() {
       ),
     },
     {
+ key:"service",
+ header:"Service",
+ cell:(j)=>(
+   <span className="text-ink-soft">
+     {serviceNames(j.serviceTypeIds)}
+   </span>
+ )
+},
+
+{
+  key: "technician",
+  header: "Technician",
+  cell: (j) => (
+    <span className="text-ink-soft">
+      {technicianNames(j.assignedTechnicianIds)}
+    </span>
+  ),
+},
+
+{
+  key: "start",
+  header: "Start Date",
+  cell: (j) => (
+    <span>
+      {j.startDate ? formatDate(j.startDate) : "-"}
+    </span>
+  ),
+},
+
+{
+  key: "promised",
+  header: "Promised End",
+  cell: (j) => (
+    <div className="flex items-center gap-2">
+      <span>
+        {j.promisedEndDate
+          ? formatDate(j.promisedEndDate)
+          : "-"}
+      </span>
+
+      {j.promisedEndDate &&
+        j.promisedEndDate.toDate() < new Date() && (
+          <span className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+            Overdue
+          </span>
+        )}
+    </div>
+  ),
+},
+    {
       key: "status",
       header: "Status",
       sortValue: (j) => JOB_STATUS_ORDER.indexOf(j.status),
@@ -172,41 +264,119 @@ export default function JobCardsPage() {
     },
   ];
 
-  async function handleCreate(form: FormData) {
-    if (!branchId) return;
-    setSaving(true);
-    const dateStr = String(form.get("scheduledDate") || "");
-    const payload = {
-      customerId: String(form.get("customerId") || ""),
-      vehicleId: String(form.get("vehicleId") || ""),
-      complaint: String(form.get("complaint") || "").trim(),
-      status: "booked" as JobStatus,
-      assignedTechnicianIds: [] as string[],
-      subtotalMinor: 0,
-      taxMinor: 0,
-      totalMinor: 0,
-      invoiceId: null,
-      scheduledDate: dateStr ? Timestamp.fromDate(new Date(dateStr)) : null,
-    };
-    if (!payload.customerId || !payload.vehicleId || !payload.complaint) {
-      notify("Customer, vehicle and complaint are required.", "error");
-      setSaving(false);
-      return;
-    }
-    try {
-      const ref = await createDoc("jobCards", branchId, payload);
-      notify("Job card created — now add parts, labor & a technician.");
-      setModalOpen(false);
-      setSelectedCustomer("");
-      // Take them straight into the job so it's obvious what to do next.
-      router.push(`/dashboard/job-cards/${ref.id}`);
-    } catch {
-      notify("Could not create job card.", "error");
-    } finally {
-      setSaving(false);
-    }
+async function handleCreate(form: FormData) {
+  if (!branchId) return;
+
+  setSaving(true);
+
+  const start = String(form.get("startDate") || "");
+  const promised = String(form.get("promisedEndDate") || "");
+
+  const payload = {
+    customerId: String(form.get("customerId") || ""),
+    vehicleId: String(form.get("vehicleId") || ""),
+
+    complaint: String(form.get("complaint") || "").trim(),
+
+    serviceTypeIds: selectedServices,
+
+    assignedTechnicianIds: selectedTechnicians,
+
+    startDate: start
+      ? Timestamp.fromDate(new Date(start))
+      : null,
+
+    promisedEndDate: promised
+      ? Timestamp.fromDate(new Date(promised))
+      : null,
+
+    status: "booked" as JobStatus,
+
+    subtotalMinor: 0,
+    taxMinor: 0,
+    totalMinor: 0,
+
+    invoiceId: null,
+
+    scheduledDate: null,
+  };
+
+
+  if (
+    !payload.customerId ||
+    !payload.vehicleId ||
+    !payload.complaint ||
+    payload.serviceTypeIds.length === 0
+  ) {
+    notify(
+      "Customer, vehicle, service and complaint are required.",
+      "error"
+    );
+
+    setSaving(false);
+    return;
   }
 
+
+  try {
+
+    const ref = await createDoc(
+      "jobCards",
+      branchId,
+      payload
+    );
+
+
+    notify("Job card created");
+
+    setModalOpen(false);
+    setSelectedCustomer("");
+    setSelectedServices([]);
+
+    router.push(
+      `/dashboard/job-cards/${ref.id}`
+    );
+
+
+  } catch(error){
+
+    console.error(error);
+
+    notify(
+      "Could not create job card.",
+      "error"
+    );
+
+  } finally {
+
+    setSaving(false);
+
+  }
+}
+
+function calculatePromisedDate(date: string) {
+  if (!date || selectedServices.length === 0) return "";
+
+  const totalDays = selectedServices.reduce((sum, id) => {
+    const service = services.find((s) => s.id === id);
+
+    return sum + (service?.estimatedDays ?? 0);
+  }, 0);
+
+  const d = new Date(date);
+
+  d.setDate(d.getDate() + totalDays);
+
+  return d.toISOString().split("T")[0];
+}
+
+useEffect(() => {
+  if (startDate) {
+    setPromisedDate(
+      calculatePromisedDate(startDate)
+    );
+  }
+}, [selectedServices]);
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
@@ -256,7 +426,9 @@ export default function JobCardsPage() {
             onChange={setStatusFilter}
             options={[
               { value: "all", label: "All", count: searched.length },
-              ...JOB_STATUS_ORDER.map((s) => ({
+              ...JOB_STATUS_ORDER.filter(
+    (s) => s !== "delivered"
+).map((s) => ({
                 value: s,
                 label: JOB_STATUS_META[s].label,
                 count: byStatus[s].length,
@@ -338,6 +510,27 @@ export default function JobCardsPage() {
                       <p className="line-clamp-2 font-sans text-sm font-medium text-ink">
                         {j.complaint}
                       </p>
+                      <p className="mt-1 text-xs text-burgundy-600">
+ {serviceNames(j.serviceTypeIds)}
+</p>
+<p className="mt-1 text-xs text-ink-soft">
+    👨‍🔧 {technicianNames(j.assignedTechnicianIds)}
+</p>
+
+<p className="mt-1 text-xs text-ink-soft">
+    Start: {j.startDate ? formatDate(j.startDate) : "-"}
+</p>
+
+<p className="mt-1 text-xs text-ink-soft">
+    Due: {j.promisedEndDate ? formatDate(j.promisedEndDate) : "-"}
+</p>
+
+{j.promisedEndDate &&
+ j.promisedEndDate.toDate() < new Date() && (
+    <span className="mt-2 inline-block rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+        Overdue
+    </span>
+)}
                       <div className="mt-2.5 space-y-1 font-sans text-xs text-ink-soft">
                         <p className="flex items-center gap-1.5">
                           <User size={12} /> {customerName(j.customerId)}
@@ -423,6 +616,221 @@ export default function JobCardsPage() {
                 : undefined
             }
           >
+          <Field label="Service Type(s)" required>
+
+<div className="relative">
+
+<button
+type="button"
+onClick={()=>setServiceOpen(!serviceOpen)}
+className="input-luxe text-left flex justify-between items-center"
+>
+
+<span>
+{
+selectedServices.length === 0
+? "Select services..."
+: `${selectedServices.length} service(s) selected`
+}
+</span>
+
+<span>▼</span>
+
+</button>
+
+
+{serviceOpen && (
+
+<div className="absolute z-20 mt-2 w-full rounded-xl border border-line bg-white p-3 shadow-lg">
+
+{services
+.filter(s=>s.active)
+.map(service=>(
+
+<label
+key={service.id}
+className="flex items-center gap-3 p-2 hover:bg-surface-muted rounded-lg cursor-pointer"
+>
+
+<input
+type="checkbox"
+checked={selectedServices.includes(service.id)}
+onChange={()=>{
+
+setSelectedServices(prev=>
+
+prev.includes(service.id)
+
+?
+
+prev.filter(id=>id!==service.id)
+
+:
+
+[...prev,service.id]
+
+);
+
+}}
+/>
+
+
+<span>
+
+{service.name}
+
+<span className="text-xs text-ink-faint ml-2">
+({service.estimatedDays} days)
+</span>
+
+</span>
+
+
+</label>
+
+))}
+
+</div>
+
+)}
+
+</div>
+
+</Field>
+
+<Field label="Technician(s)">
+
+<div className="relative">
+
+
+<button
+type="button"
+onClick={()=>setTechnicianOpen(!technicianOpen)}
+className="input-luxe text-left flex justify-between items-center"
+>
+
+<span>
+
+{
+selectedTechnicians.length===0
+
+?
+
+"Select technicians..."
+
+:
+
+`${selectedTechnicians.length} technician(s) selected`
+
+}
+
+</span>
+
+<span>▼</span>
+
+</button>
+
+
+
+{technicianOpen && (
+
+<div className="absolute z-20 mt-2 w-full rounded-xl border border-line bg-white p-3 shadow-lg">
+
+
+{
+availableTechnicians.map(t=>(
+
+
+<label
+key={t.id}
+className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-muted cursor-pointer"
+>
+
+
+<input
+type="checkbox"
+checked={selectedTechnicians.includes(t.id)}
+
+onChange={()=>{
+
+setSelectedTechnicians(prev=>
+
+prev.includes(t.id)
+
+?
+
+prev.filter(id=>id!==t.id)
+
+:
+
+[...prev,t.id]
+
+)
+
+}}
+
+/>
+
+
+<span className="flex items-center justify-between w-full">
+  <span>
+    {t.displayName || t.email}
+  </span>
+
+  <span className="text-xs text-ink-faint">
+    ({technicianJobCount(t.id)})
+  </span>
+</span>
+
+</label>
+
+
+))
+}
+
+
+</div>
+
+)}
+
+</div>
+
+</Field>
+
+<Field label="Start date">
+
+<input
+  name="startDate"
+  type="date"
+  className="input-luxe"
+  value={startDate}
+  onChange={(e) => {
+    const value = e.target.value;
+
+    setStartDate(value);
+
+    setPromisedDate(
+      calculatePromisedDate(value)
+    );
+  }}
+/>
+
+</Field>
+
+
+<Field label="Promised end date">
+
+<input
+  name="promisedEndDate"
+  type="date"
+  className="input-luxe"
+  value={promisedDate}
+  onChange={(e) =>
+    setPromisedDate(e.target.value)
+  }
+/>
+
+</Field>
             <select
               name="vehicleId"
               className="input-luxe"
