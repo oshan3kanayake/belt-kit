@@ -1,0 +1,261 @@
+"use client";
+
+import { useMemo } from "react";
+import Link from "next/link";
+import {
+  ClipboardCheck,
+  Car,
+  User,
+  CalendarCheck
+} from "lucide-react";
+
+import { useCollection } from "@/lib/useCollection";
+import {
+  JobCard,
+  Customer,
+  Vehicle,
+  ServiceType
+} from "@/lib/models";
+
+import {
+  PageHeader,
+  EmptyState,
+  Badge
+} from "@/components/ui";
+
+import {
+  formatDate,
+  formatMoney
+} from "@/lib/format";
+
+import { JOB_STATUS_META } from "@/lib/models";
+
+
+export default function FinishedJobsPage(){
+
+const {data:jobs,loading}=useCollection<JobCard>(
+ "jobCards"
+);
+
+const {data:customers}=useCollection<Customer>(
+ "customers"
+);
+
+const {data:vehicles}=useCollection<Vehicle>(
+ "vehicles"
+);
+
+const {data:services}=useCollection<ServiceType>(
+ "services"
+);
+
+
+
+const finishedJobs = useMemo(()=>{
+
+return jobs
+.filter(
+ j=>j.status==="delivered" && !j.archived
+)
+.sort(
+(a,b)=>
+(b.actualEndDate?.toMillis()??0)
+-
+(a.actualEndDate?.toMillis()??0)
+);
+
+},[jobs]);
+
+
+
+function customerName(id:string){
+
+return customers.find(c=>c.id===id)
+?.displayName ?? "-";
+
+}
+
+
+function vehicleName(id:string){
+
+const v=vehicles.find(v=>v.id===id);
+
+return v
+?
+`${v.make} ${v.model} · ${v.plateNumber}`
+:
+"-";
+
+}
+
+
+function serviceNames(ids?: string[]){
+
+return services
+.filter(s => (ids ?? []).includes(s.id))
+.map(s => s.name)
+.join(", ") || "-";
+
+}
+
+
+
+return (
+
+<div className="mx-auto max-w-7xl">
+
+<PageHeader
+
+eyebrow="Operations"
+
+title="Finished Jobs"
+
+icon={ClipboardCheck}
+
+/>
+
+
+
+{
+loading ?
+
+<p>Loading...</p>
+
+
+:
+
+finishedJobs.length===0 ?
+
+
+<EmptyState
+
+icon={ClipboardCheck}
+
+title="No finished jobs"
+
+hint="Delivered jobs will appear here."
+
+/>
+
+
+:
+
+<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+
+
+{
+finishedJobs.map(job=>(
+
+
+<Link
+
+key={job.id}
+
+href={`/dashboard/job-cards/${job.id}`}
+
+className="card p-5 hover:shadow-luxe"
+
+>
+
+
+<div className="flex justify-between">
+
+<Badge tone="burgundy">
+
+Delivered
+
+</Badge>
+
+
+</div>
+
+
+<h3 className="mt-3 font-semibold">
+
+{job.complaint}
+
+</h3>
+
+
+
+<div className="mt-3 space-y-2 text-sm text-ink-soft">
+
+
+<p className="flex gap-2">
+
+<User size={15}/>
+
+{customerName(job.customerId)}
+
+</p>
+
+
+<p className="flex gap-2">
+
+<Car size={15}/>
+
+{vehicleName(job.vehicleId)}
+
+</p>
+
+
+
+<p>
+
+🔧 {serviceNames(job.serviceTypeIds)}
+
+</p>
+
+
+
+<p className="flex gap-2">
+
+<CalendarCheck size={15}/>
+
+Completed:
+
+{
+job.actualEndDate
+?
+formatDate(job.actualEndDate)
+:
+"-"
+}
+
+</p>
+
+
+<p className="font-semibold text-ink">
+
+Final Bill:
+
+{
+formatMoney(job.totalMinor)
+}
+
+</p>
+
+
+
+</div>
+
+
+</Link>
+
+
+))
+
+}
+
+
+</div>
+
+}
+
+
+
+</div>
+
+)
+
+}
