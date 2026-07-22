@@ -119,6 +119,11 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---- Services --------------------------------------------------------
+    match /services/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if myRole() in ['owner', 'manager', 'advisor'];
+    }
     match /{document=**} {
       allow read, write: if false;
     }
