@@ -3,7 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { doc, getDoc, onSnapshot, collection, getDocs, query, where as fsWhere } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection, getDocs, query, where as fsWhere,  Timestamp
+ } from "firebase/firestore";
 import { generateInvoiceClient } from "@/lib/invoice";
 import {
   ArrowLeft,
@@ -29,6 +30,7 @@ import {
   JobCardLine,
   Part,
   JobStatus,
+  ServiceType,
   JOB_STATUS_META,
   JOB_STATUS_ORDER,
 } from "@/lib/models";
@@ -55,11 +57,19 @@ export default function JobCardDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
+const [customers, setCustomers] = useState<(Customer & { id: string })[]>([]);
+const [editVehicles, setEditVehicles] = useState<(Vehicle & { id: string })[]>([]);
 
   const { data: lines } = useCollection<JobCardLine>("jobCardLines", [
     where("jobCardId", "==", id),
   ]);
   const { data: parts } = useCollection<Part>("parts");
+  const { data: services } = useCollection<ServiceType>("services");
+  const serviceNames = (ids:string[]) =>
+ services
+ .filter(s=>ids?.includes(s.id))
+ .map(s=>s.name)
+ .join(", ");
 
   const [lineModal, setLineModal] = useState(false);
   const [lineKind, setLineKind] = useState<"labor" | "part">("labor");
@@ -68,6 +78,13 @@ export default function JobCardDetailPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [technicians, setTechnicians] = useState<{ uid: string; name: string }[]>([]);
+  const [editOpen,setEditOpen]=useState(false);
+const [editCustomer, setEditCustomer] = useState("");
+const [editVehicle, setEditVehicle] = useState("");
+const [editServices, setEditServices] = useState<string[]>([]);
+const [editTechnicians, setEditTechnicians] = useState<string[]>([]);
+const [editScheduledDate, setEditScheduledDate] = useState("");
+const [completionNotes, setCompletionNotes] = useState("");
 
   useEffect(() => {
     if (role !== "owner" && role !== "manager" && role !== "advisor") return;
@@ -88,6 +105,57 @@ export default function JobCardDetailPage() {
     })();
   }, [role]);
 
+  useEffect(() => {
+  async function loadCustomers() {
+    const snap = await getDocs(collection(db,"customers"));
+
+    setCustomers(
+  snap.docs.map(d => ({
+    id: d.id,
+    ...d.data(),
+  })) as (Customer & { id: string })[]
+);
+  }
+
+  loadCustomers();
+},[]);
+
+useEffect(()=>{
+
+if(!editCustomer){
+ setEditVehicles([]);
+ return;
+}
+
+
+async function loadVehicles(){
+
+const snap = await getDocs(
+ query(
+  collection(db,"vehicles"),
+  fsWhere("customerId","==",editCustomer)
+ )
+);
+
+
+setEditVehicles(
+ snap.docs.map(d => ({
+   id: d.id,
+   ...d.data(),
+ })) as (Vehicle & { id: string })[]
+);
+
+
+}
+
+
+loadVehicles();
+
+
+},[editCustomer]);
+
+  
+
   async function toggleTechnician(uid: string) {
     if (!job) return;
     const current = job.assignedTechnicianIds || [];
@@ -102,31 +170,125 @@ export default function JobCardDetailPage() {
     }
   }
 
-  async function deleteJob() {
-    try {
-      await deleteDocById("jobCards", id);
-      notify("Job card deleted.");
-      router.push("/dashboard/job-cards");
-    } catch {
-      notify("Could not delete job card.", "error");
-    }
-  }
+  async function updateJob(form: FormData) {
 
-  const canEditJob = role === "owner" || role === "manager" || role === "advisor";
-  const canDoFinancial =
-    role === "owner" || role === "manager" || role === "advisor" || role === "accountant";
-  const isTech = role === "technician";
-  const canAssign = role === "owner" || role === "manager" || role === "advisor";
-  const isAssignedTech =
-    isTech && !!job &&
-    (job.assignedTechnicianIds || []).includes(auth.currentUser?.uid ?? "__none__");
-  const canEditLines = canEditJob || isAssignedTech;
+  try {
+
+    await updateDocById(
+  "jobCards",
+  id,
+  {
+    customerId: String(form.get("customerId")),
+
+    vehicleId: String(form.get("vehicleId")),
+
+    complaint: String(form.get("complaint")),
+
+    serviceTypeIds: editServices,
+
+    assignedTechnicianIds: editTechnicians,
+
+    scheduledDate: form.get("scheduledDate")
+      ? Timestamp.fromDate(
+          new Date(String(form.get("scheduledDate")))
+        )
+      : null,
+
+    startDate: form.get("startDate")
+      ? Timestamp.fromDate(
+          new Date(String(form.get("startDate")))
+        )
+      : null,
+
+    promisedEndDate: form.get("promisedEndDate")
+      ? Timestamp.fromDate(
+          new Date(String(form.get("promisedEndDate")))
+        )
+      : null,
+  }
+);
+
+
+    notify("Job updated.");
+
+    setEditOpen(false);
+
+
+  } catch {
+
+    notify(
+      "Could not update job.",
+      "error"
+    );
+
+  }
+}
+
+async function deleteJob() {
+ try {
+
+   await updateDocById(
+    "jobCards",
+    id,
+    {
+      archived:true
+    }
+   );
+
+   notify("Job card deleted.");
+
+   router.push("/dashboard/job-cards");
+
+ } catch {
+
+   notify(
+    "Could not delete job card.",
+    "error"
+   );
+
+ }
+}
+  
+
+  const readOnly = job?.status === "delivered";
+
+const canEditJob =
+  role === "owner" ||
+  role === "manager" ||
+  role === "advisor";
+
+const canDoFinancial =
+  role === "owner" ||
+  role === "manager" ||
+  role === "advisor" ||
+  role === "accountant";
+
+const isTech = role === "technician";
+
+const canAssign =
+  !readOnly &&
+  (
+    role === "owner" ||
+    role === "manager" ||
+    role === "advisor"
+  );
+
+const isAssignedTech =
+  isTech &&
+  !!job &&
+  (job.assignedTechnicianIds || [])
+    .includes(auth.currentUser?.uid ?? "__none__");
+
+const canEditLines =
+  !readOnly &&
+  (canEditJob || isAssignedTech);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "jobCards", id), async (snap) => {
       if (!snap.exists()) { setLoading(false); return; }
       const j = snap.data() as JobCard;
       setJob(j);
+      setCompletionNotes(j.completionNotes || "");
       setLoading(false);
       if (j.customerId && !customer) {
         const cs = await getDoc(doc(db, "customers", j.customerId));
@@ -160,15 +322,58 @@ export default function JobCardDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totals.subtotal, totals.total, canEditJob]);
 
-  async function changeStatus(status: JobStatus) {
-    try {
-      await updateDocById("jobCards", id, { status });
-      notify(`Status → ${JOB_STATUS_META[status].label}`);
-    } catch {
-      notify("Could not update status.", "error");
-    }
+async function changeStatus(status: JobStatus) {
+
+  try {
+
+    const update: Partial<JobCard> = {
+      status
+    };
+
+
+if (status === "delivered") {
+
+  if (!completionNotes.trim()) {
+    notify(
+      "Completion notes are required before marking the job as delivered.",
+      "error"
+    );
+    return;
   }
 
+  update.actualEndDate = Timestamp.now();
+
+  update.completionNotes = completionNotes.trim();
+
+}
+
+    await updateDocById(
+      "jobCards",
+      id,
+      update
+    );
+
+
+    notify(
+      `Status → ${JOB_STATUS_META[status].label}`
+    );
+
+
+if(status === "delivered"){
+  router.push("/dashboard/job-cards/finished-jobs");
+}
+
+
+  } catch {
+
+    notify(
+      "Could not update status.",
+      "error"
+    );
+
+  }
+
+}
   function openLine(kind: "labor" | "part") {
     setLineKind(kind);
     setLineModal(true);
@@ -239,7 +444,7 @@ export default function JobCardDetailPage() {
       </div>
     );
 
-  const techCount = (job.assignedTechnicianIds || []).length;
+const techCount = (job.assignedTechnicianIds || []).length;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -261,6 +466,10 @@ export default function JobCardDetailPage() {
               {job.complaint}
             </h1>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-soft">
+              <span className="flex items-center gap-1.5">
+ <Wrench size={14}/>
+ {serviceNames(job.serviceTypeIds)}
+</span>
               {customer && (
                 <Link href={`/dashboard/customers/${job.customerId}`} className="flex items-center gap-1.5 hover:text-burgundy-600">
                   <User size={14} /> {customer.displayName}
@@ -273,16 +482,42 @@ export default function JobCardDetailPage() {
               )}
             </div>
           </div>
-          {canEditJob && (
-            <button onClick={() => setDeleteOpen(true)} className="btn-ghost shrink-0 px-3 py-2 text-xs">
-              <Trash2 size={15} /> Delete
-            </button>
-          )}
+          {!readOnly && (
+<button
+onClick={()=>{
+ setEditCustomer(job.customerId || "");
+ setEditVehicle(job.vehicleId || "");
+ setEditServices(job.serviceTypeIds || []);
+ setEditTechnicians(job.assignedTechnicianIds || []);
+
+ setEditScheduledDate(
+   job.scheduledDate
+   ? job.scheduledDate.toDate().toISOString().split("T")[0]
+   : ""
+ );
+
+ setEditOpen(true);
+}}
+className="btn-ghost"
+>
+ Edit
+</button>
+)}
+          {canEditJob && !readOnly && (
+<button 
+onClick={() => setDeleteOpen(true)} 
+className="btn-ghost shrink-0 px-3 py-2 text-xs"
+>
+<Trash2 size={15} /> Delete
+</button>
+)}
         </div>
       </div>
 
       {/* ── Guided "Next steps" action bar ─────────────────────────────── */}
-      {!job.invoiceId && (canEditLines || canAssign || canDoFinancial) && (
+      {!readOnly &&
+ !job.invoiceId &&
+ (canEditLines || canAssign || canDoFinancial) && (
         <div className="rounded-2xl border border-burgundy-200 bg-burgundy-50/60 p-5">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-burgundy-600 text-xs font-bold text-white">
@@ -341,8 +576,7 @@ export default function JobCardDetailPage() {
         <div className="flex flex-wrap gap-2">
           {JOB_STATUS_ORDER.map((s) => {
             const active = job.status === s;
-            const disabled = !(canEditJob || isTech) || !!job.invoiceId;
-            return (
+const disabled = readOnly || !(canEditJob || isTech);           return (
               <button
                 key={s}
                 disabled={disabled}
@@ -359,6 +593,20 @@ export default function JobCardDetailPage() {
           })}
         </div>
       </div>
+
+      {!readOnly && (
+  <div className="mt-5">
+    <Field label="Completion Notes">
+      <textarea
+        className="input-luxe"
+        rows={4}
+        value={completionNotes}
+        onChange={(e)=>setCompletionNotes(e.target.value)}
+        placeholder="Describe completed work, repairs performed, replaced parts, customer notes..."
+      />
+    </Field>
+  </div>
+)}
 
       {/* Assigned technicians */}
       <div className="card p-6">
@@ -467,7 +715,17 @@ export default function JobCardDetailPage() {
             </div>
           </div>
         </div>
+
+        
       </div>
+      {job.completionNotes && (
+  <div className="mt-6 rounded-xl border border-line p-4">
+    <h3 className="font-semibold mb-2">Completion Notes</h3>
+    <p className="whitespace-pre-wrap text-sm text-ink-soft">
+      {job.completionNotes}
+    </p>
+  </div>
+)}
 
       {/* Invoice status footer */}
       <div className="card flex flex-col items-center justify-between gap-4 p-5 sm:flex-row">
@@ -565,6 +823,215 @@ export default function JobCardDetailPage() {
         </div>
       </Modal>
 
+<Modal
+ open={editOpen}
+ onClose={()=>setEditOpen(false)}
+ title="Edit Job Card"
+>
+
+<form
+onSubmit={(e)=>{
+ e.preventDefault();
+ updateJob(new FormData(e.currentTarget));
+}}
+className="space-y-4"
+>
+
+<Field label="Services">
+
+<select
+multiple
+value={editServices}
+onChange={(e)=>
+setEditServices(
+Array.from(
+e.target.selectedOptions,
+o=>o.value
+)
+)
+}
+className="input-luxe h-32"
+>
+
+
+{services.map(s=>(
+
+<option key={s.id} value={s.id}>
+{s.name}
+</option>
+
+))}
+
+
+</select>
+
+</Field>
+
+<Field label="Technicians">
+
+<select
+multiple
+value={editTechnicians}
+onChange={(e)=>
+setEditTechnicians(
+Array.from(
+e.target.selectedOptions,
+o=>o.value
+)
+)
+}
+className="input-luxe h-32"
+>
+
+
+{technicians.map(t=>(
+
+<option key={t.uid} value={t.uid}>
+{t.name}
+</option>
+
+))}
+
+
+</select>
+
+</Field>
+
+<Field label="Scheduled Date">
+
+<input
+name="scheduledDate"
+type="date"
+value={editScheduledDate}
+onChange={(e)=>setEditScheduledDate(e.target.value)}
+className="input-luxe"
+/>
+
+</Field>
+
+<Field label="Customer">
+
+<select
+name="customerId"
+value={editCustomer}
+onChange={(e)=>{
+ setEditCustomer(e.target.value);
+ setEditVehicle("");
+}}
+className="input-luxe"
+>
+
+<option value="">Select customer</option>
+
+{customers.map(c=>(
+<option key={c.id} value={c.id}>
+{c.displayName}
+</option>
+))}
+
+</select>
+
+</Field>
+
+<Field label="Vehicle">
+
+<select
+name="vehicleId"
+value={editVehicle}
+onChange={(e)=>setEditVehicle(e.target.value)}
+className="input-luxe"
+>
+
+<option value="">
+Select vehicle
+</option>
+
+
+{editVehicles.map(v=>(
+
+<option key={v.id} value={v.id}>
+{v.make} {v.model} - {v.plateNumber}
+</option>
+
+))}
+
+
+</select>
+
+</Field>
+
+<Field label="Complaint">
+
+<textarea
+name="complaint"
+defaultValue={job.complaint}
+className="input-luxe"
+/>
+
+</Field>
+
+
+<Field label="Start Date">
+
+<input
+name="startDate"
+type="date"
+defaultValue={
+ job.startDate
+ ? job.startDate.toDate()
+   .toISOString()
+   .split("T")[0]
+ : ""
+}
+className="input-luxe"
+/>
+
+</Field>
+
+
+<Field label="Promised End Date">
+
+<input
+name="promisedEndDate"
+type="date"
+defaultValue={
+ job.promisedEndDate
+ ? job.promisedEndDate.toDate()
+   .toISOString()
+   .split("T")[0]
+ : ""
+}
+className="input-luxe"
+/>
+
+</Field>
+
+
+<div className="flex justify-end gap-3">
+
+<button
+type="button"
+onClick={()=>setEditOpen(false)}
+className="btn-ghost"
+>
+Cancel
+</button>
+
+
+<button
+type="submit"
+className="btn-primary"
+>
+Save Changes
+</button>
+
+
+</div>
+
+
+</form>
+
+</Modal>
       <ConfirmDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
