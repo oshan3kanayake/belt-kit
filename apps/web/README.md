@@ -31,19 +31,11 @@ npm install
 
 ## Create the default login accounts
 
-The app needs users to log in. Seed the five role accounts (owner, manager,
-advisor, technician, accountant) with a shared demo password.
-
-**Against real cloud** (what you chose):
-1. Firebase console → **Project settings → Service accounts → Generate new private key**.
-2. Save the downloaded file as `functions/serviceAccountKey.json` (this file is gitignored — never commit it).
-3. Run:
-   ```bash
-   cd ../../functions
-   npm run seed:cloud
-   ```
-
-**Against the emulator** (free, no key needed): start `npm run serve` in `functions/`, then in another terminal run `npm run seed`.
+The local app needs users to log in. The demo seed is deliberately restricted
+to loopback Firebase emulators and never writes demo identities to production.
+From the repository root run
+`npm run dev`. It starts the emulators, safely seeds/repairs every demo account,
+and then starts the web app. Emulator data is preserved between clean stops.
 
 ### Default credentials
 
@@ -54,18 +46,26 @@ advisor, technician, accountant) with a shared demo password.
 | Service Advisor | `advisor@beltkit.local` | `beltkit123` |
 | Technician | `tech@beltkit.local` | `beltkit123` |
 | Accountant / Cashier | `accounts@beltkit.local` | `beltkit123` |
+| Notification advisor | `notification-admin@test.com` | `beltkit123` |
+| Local notification advisor | `local-notification-user@example.test` | `beltkit123` |
 
 You can rename accounts and (with the role function) change roles from the **Users & Roles** screen once signed in as owner/manager. Change the password before going live.
 
 ---
 
-## Run it
+## Run it locally
 
 ```bash
-cd apps/web
 npm run dev
 ```
 Open <http://localhost:3000>. You'll land on the login page — sign in with any account above.
+
+Run this command from the repository root. It builds Functions, starts the
+`belt-kit` Auth/Firestore/Functions emulators, actively waits for Auth and
+Firestore, repairs all demo users and their claims/profiles, verifies every
+login, and only then starts the frontend. The seed does not depend on saved
+emulator data, although clean shutdowns are also exported to
+`.firebase/emulator-data`.
 
 ---
 

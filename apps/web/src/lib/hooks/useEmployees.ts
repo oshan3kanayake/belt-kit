@@ -5,7 +5,7 @@ import employeeService from "../services/employeeService";
 import { Employee } from "../models";
 import { useAuth } from "../auth-context";
 
-export function useEmployees() {
+export function useEmployees(options: { branchScoped?: boolean } = {}) {
   const { role, roleResolved } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,7 +15,7 @@ export function useEmployees() {
     setLoading(true);
     setError(null);
     try {
-      const res = await employeeService.getEmployees();
+      const res = await employeeService.getEmployees(options);
       setEmployees(res.employees ?? []);
     } catch (err: unknown) {
       const msg = (err as { message?: string; code?: string })?.message ?? "Failed to load employees.";
@@ -24,7 +24,7 @@ export function useEmployees() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [options.branchScoped]);
 
   useEffect(() => {
     if (!roleResolved) {

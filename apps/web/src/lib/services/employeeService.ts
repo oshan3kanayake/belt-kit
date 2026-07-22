@@ -76,10 +76,10 @@ export async function assignEmployeeRole(params: AssignRoleParams) {
 }
 
 /** Fetch employees (wraps callable `getEmployees`). */
-export async function getEmployees() {
+export async function getEmployees(options: { branchScoped?: boolean } = {}) {
   try {
     const fn = httpsCallable(functions, "getEmployees");
-    const res = await fn({});
+    const res = await fn(options);
     return res.data as { employees: Employee[] };
   } catch (err) {
     throw err;

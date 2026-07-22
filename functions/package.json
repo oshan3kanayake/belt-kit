@@ -10,20 +10,25 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "test": "jest",
+    "test:notifications": "npm run build && NOTIFICATION_FUNCTIONS_PORT=5101 firebase emulators:exec --config ../firebase.notifications-test.json --project belt-kit --only auth,firestore,functions,pubsub \"node test/notifications.integration.js\"",
+    "test:attendance-report": "npm run build && ATTENDANCE_REPORT_FUNCTIONS_PORT=5101 firebase emulators:exec --config ../firebase.notifications-test.json --project belt-kit --only auth,firestore,functions,pubsub \"node test/attendance-report.integration.js\"",
+    "test:demo-users": "firebase emulators:exec --config ../firebase.notifications-test.json --project belt-kit --only auth,firestore \"npm run seed && npm run seed && node test/demo-users.integration.js\"",
+    "test:attendance-workflow": "npm run build && ATTENDANCE_FUNCTIONS_PORT=5101 firebase emulators:exec --config ../firebase.notifications-test.json --project belt-kit --only auth,firestore,functions,pubsub \"node test/attendance-workflow.integration.js\"",
     "serve": "npm run build && firebase emulators:start --only functions,firestore,auth,storage",
     "shell": "npm run build && firebase functions:shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "seed": "node scripts/seed.mjs",
-    "seed:cloud": "node scripts/seed.mjs --cloud"
+    "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.1.1",
-    "jose": "^5.9.6"
+    "jose": "^5.9.6",
+    "pdfkit": "^0.19.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
+    "@types/pdfkit": "^0.17.6",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.11",
     "typescript": "^5.5.4"

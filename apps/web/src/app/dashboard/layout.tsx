@@ -25,6 +25,7 @@ import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
 import { CommandBar } from "@/components/CommandBar";
 import { GearLoader } from "@/components/ui";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 type NavItem = {
   href: string;
@@ -204,17 +205,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line bg-white px-6 py-4 lg:hidden">
           <span className="text-[15px] font-bold tracking-tight text-ink">Belt-Kit</span>
-          <button onClick={() => logout()} className="text-ink-soft hover:text-burgundy-500">
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button onClick={() => logout()} className="p-2 text-ink-soft hover:text-burgundy-500" aria-label="Sign out">
+              <LogOut size={18} />
+            </button>
+          </div>
         </header>
 
-        <div className="hidden lg:flex items-center border-b border-line bg-white px-8 py-3 shadow-soft">
+        <div className="hidden lg:flex items-center justify-between border-b border-line bg-white px-8 py-3 shadow-soft">
           <div className="flex items-center gap-2 text-xs text-ink-faint">
             <span className="font-semibold text-ink">Dashboard</span>
             <ChevronRight size={12} />
             <span>{CORE_NAV.find((n) => n.href === pathname)?.label ?? "Overview"}</span>
           </div>
+          <NotificationBell />
         </div>
 
         <motion.main

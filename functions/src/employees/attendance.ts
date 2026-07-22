@@ -108,11 +108,6 @@ async(request)=>{
 
 
 
-    const role =
-        request.auth!.token.role;
-
-
-
     const employeeRef =
         db.collection("users")
         .doc(employeeId);
@@ -140,9 +135,8 @@ async(request)=>{
 
 
 
-    // Manager branch isolation
+    // Attendance is always managed within the authenticated active branch.
     if(
-        role === "manager" &&
         employee?.branchId !== branchId
     ){
 
@@ -261,7 +255,12 @@ async(request)=>{
         success:true,
 
         attendanceId:
-            attendanceRef.id
+            attendanceRef.id,
+
+        operation:
+            existing.exists
+            ? "updated"
+            : "created"
 
     };
 

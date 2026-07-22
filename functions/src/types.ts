@@ -15,7 +15,9 @@
  *   - Financial/status changes get an AuditLogEntry (written by a Function).
  */
 
-import { Timestamp } from "firebase-admin/firestore";
+import type {
+  Timestamp,
+} from "firebase-admin/firestore";
 
 /** The fixed set of roles from the spec's permission matrix. */
 export type Role =
@@ -32,22 +34,22 @@ export interface BaseDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   createdByUid: string;
-  archived: boolean; // soft-delete flag — we never hard-delete
+  archived: boolean;
 }
 
 // ---- Branches --------------------------------------------------------------
+
 export interface Branch {
   name: string;
-  currency: string; // ISO 4217, e.g. "LKR", "GBP", "INR"
-  taxRatePercent: number; // default VAT/GST rate for this branch
-  timezone: string; // e.g. "Asia/Colombo"
+  currency: string;
+  taxRatePercent: number;
+  timezone: string;
   createdAt: Timestamp;
   archived: boolean;
 }
 
 // ---- Users / staff ---------------------------------------------------------
-// The authoritative role lives in Firebase Auth custom claims (set by a
-// Function). This mirror doc exists so staff lists are queryable in Firestore.
+
 export interface UserProfile {
   branchId: string;
   role: Role;
@@ -59,17 +61,24 @@ export interface UserProfile {
 }
 
 // ---- Customers (CRM) -------------------------------------------------------
+
 export interface Customer extends BaseDoc {
   displayName: string;
   phone: string;
   email?: string;
-  preferredChannel: "sms" | "whatsapp" | "email";
-  segment?: "vip" | "fleet" | "walkin";
-  // Optional link to a portal login (Firebase Auth uid) if the customer has one.
+  preferredChannel:
+    | "sms"
+    | "whatsapp"
+    | "email";
+  segment?:
+    | "vip"
+    | "fleet"
+    | "walkin";
   portalUid?: string | null;
 }
 
 // ---- Vehicles --------------------------------------------------------------
+
 export interface Vehicle extends BaseDoc {
   customerId: string;
   plateNumber: string;
@@ -81,6 +90,7 @@ export interface Vehicle extends BaseDoc {
 }
 
 // ---- Job Cards / Repair Orders --------------------------------------------
+
 export type JobStatus =
   | "booked"
   | "in_progress"
@@ -92,14 +102,23 @@ export type JobStatus =
 export interface JobCard extends BaseDoc {
   customerId: string;
   vehicleId: string;
-  complaint: string; // what the customer reported
+  complaint: string;
   status: JobStatus;
-  assignedTechnicianIds: string[]; // Auth uids of assigned technicians
-  // Rolled-up totals in minor units, kept in sync when lines change.
+  assignedTechnicianIds: string[];
+
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
-  invoiceId?: string | null; // set once an invoice is generated
+
+  invoiceId?: string | null;
+
+  /**
+   * The next planned service date.
+   *
+   * This should be populated when the job is completed/delivered
+   * so the service-reminder notification can be scheduled.
+   */
+  nextServiceDate?: Timestamp | null;
 }
 
 /** A single labor or parts line on a job card. */
@@ -107,14 +126,14 @@ export interface JobCardLine extends BaseDoc {
   jobCardId: string;
   kind: "labor" | "part";
   description: string;
-  partId?: string | null; // set when kind === "part"
+  partId?: string | null;
   quantity: number;
-  // Price captured at the moment the line was added — never re-read live.
   unitPriceMinor: number;
-  lineTotalMinor: number; // quantity * unitPriceMinor
+  lineTotalMinor: number;
 }
 
 // ---- Inventory -------------------------------------------------------------
+
 export interface Part extends BaseDoc {
   sku: string;
   name: string;
@@ -122,32 +141,42 @@ export interface Part extends BaseDoc {
   sellPriceMinor: number;
   quantityOnHand: number;
   reorderThreshold: number;
-  lowStock: boolean; // derived: quantityOnHand <= reorderThreshold
+  lowStock: boolean;
   binLocation?: string;
 }
 
 /** Append-only record of stock going in or out. */
 export interface StockMovement extends BaseDoc {
   partId: string;
-  delta: number; // negative = used/sold, positive = received
-  reason: "job_use" | "purchase" | "adjustment" | "return";
+  delta: number;
+  reason:
+    | "job_use"
+    | "purchase"
+    | "adjustment"
+    | "return";
   jobCardId?: string | null;
 }
 
 // ---- Billing ---------------------------------------------------------------
-export type InvoiceStatus = "draft" | "issued" | "part_paid" | "paid" | "void";
+
+export type InvoiceStatus =
+  | "draft"
+  | "issued"
+  | "part_paid"
+  | "paid"
+  | "void";
 
 export interface Invoice extends BaseDoc {
   jobCardId: string;
   customerId: string;
-  customerUid?: string | null; // for portal read access, if customer has login
+  customerUid?: string | null;
   status: InvoiceStatus;
   currency: string;
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
   amountPaidMinor: number;
-  // Snapshot of the lines at invoice time so history is frozen.
+
   lines: Array<{
     description: string;
     quantity: number;
@@ -161,16 +190,21 @@ export interface Payment extends BaseDoc {
   customerId: string;
   customerUid?: string | null;
   amountMinor: number;
-  method: "cash" | "card" | "bank_transfer" | "wallet";
+  method:
+    | "cash"
+    | "card"
+    | "bank_transfer"
+    | "wallet";
   reference?: string;
 }
 
 // ---- Audit log -------------------------------------------------------------
+
 export interface AuditLogEntry {
   branchId: string;
-  actorUid: string; // who did it
-  action: string; // e.g. "invoice.created", "jobCard.status_changed"
-  entityType: string; // "invoice" | "jobCard" | "payment" | "part" ...
+  actorUid: string;
+  action: string;
+  entityType: string;
   entityId: string;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
@@ -180,60 +214,183 @@ export interface AuditLogEntry {
 // ---- Employee Payments -----------------------------------------------------
 
 export interface EmployeePayment {
-    employeeId: string;
-    branchId: string;
+  employeeId: string;
+  branchId: string;
 
-    month: string; 
-    // Example: "2026-07"
+  month: string;
 
-    amountPaidMinor: number;
+  amountPaidMinor: number;
 
-    paidDate: string;
+  paidDate: string;
 
-    createdBy: string;
+  createdBy: string;
 }
 
-// ---- Employee Payments ----------------------------------------------------
+// ---- Employee Payments -----------------------------------------------------
 
 export interface EmployeePayment extends BaseDoc {
+  employeeId: string;
 
-    // Employee who received payment
-    employeeId: string;
+  month: string;
 
+  amountPaidMinor: number;
 
-    // Payment month
-    // Example: "2026-07"
-    month: string;
+  datePaid: string;
 
-
-    // Amount stored as minor units
-    // Example: 7500000 = LKR 75,000.00
-    amountPaidMinor: number;
-
-
-    // Actual payment date
-    datePaid: string;
-
-
-    // Optional note
-    note?: string;
+  note?: string;
 }
+
+// ---- Attendance ------------------------------------------------------------
 
 export type AttendanceStatus =
   | "PRESENT"
   | "ON_LEAVE";
-
 
 export interface Attendance {
   id: string;
 
   employeeId: string;
 
+  /**
+   * Required for branch isolation and for sending the alert
+   * only to front-desk users in the same branch.
+   */
+  branchId: string;
+
+  /**
+   * Format: YYYY-MM-DD
+   */
   date: string;
 
   status: AttendanceStatus;
 
-  createdAt?: FirebaseFirestore.Timestamp;
+  /**
+   * Optional note entered by the manager/front desk.
+   */
+  note?: string;
 
+<<<<<<< Updated upstream
   updatedAt?: FirebaseFirestore.Timestamp;
+=======
+  createdAt?: Timestamp;
+
+  updatedAt?: Timestamp;
+}
+
+// ---- Suppliers -------------------------------------------------------------
+
+export interface Supplier {
+  name: string;
+
+  phone: string;
+
+  email: string;
+
+  branchId: string;
+}
+
+export interface PurchaseItem {
+  name: string;
+
+  quantity: number;
+
+  cost: number;
+}
+
+// ---- Notifications ---------------------------------------------------------
+
+export type NotificationType =
+  | "LOW_STOCK"
+  | "NEXT_SERVICE"
+  | "EMPLOYEE_ON_LEAVE";
+
+export type NotificationTargetType =
+  | "PART"
+  | "VEHICLE"
+  | "JOB_CARD"
+  | "ATTENDANCE";
+
+export interface CreateBranchNotificationInput {
+  branchId: string;
+
+  type: NotificationType;
+
+  title: string;
+  message: string;
+
+  targetType: NotificationTargetType;
+  targetId: string;
+
+  /**
+   * Used to generate deterministic document IDs and prevent
+   * duplicate notifications when Firebase retries an event.
+   */
+  sourceEventId: string;
+
+  relatedPartId?: string;
+  relatedVehicleId?: string;
+  relatedJobCardId?: string;
+
+  /**
+   * Employee-leave notification relationships.
+   */
+  relatedEmployeeId?: string;
+  relatedAttendanceId?: string;
+  attendanceDate?: string;
+
+  /**
+   * Optional recipient-role override.
+   *
+   * Employee-on-leave alerts use this to send only to
+   * front-desk/advisor users.
+   */
+  allowedRoles?: readonly string[];
+}
+
+export interface NotificationDocument {
+  branchId: string;
+  recipientUid: string;
+
+  type: NotificationType;
+
+  title: string;
+  message: string;
+
+  targetType: NotificationTargetType;
+  targetId: string;
+
+  sourceEventId: string;
+
+  relatedPartId?: string;
+  relatedVehicleId?: string;
+  relatedJobCardId?: string;
+
+  relatedEmployeeId?: string;
+  relatedAttendanceId?: string;
+  attendanceDate?: string;
+
+  isRead: boolean;
+  readAt: Timestamp | null;
+
+  createdAt: Timestamp;
+}
+
+export interface ServiceReminderDocument {
+  branchId: string;
+
+  jobCardId: string;
+  vehicleId: string;
+
+  customerId?: string;
+  vehicleRegistration?: string;
+
+  nextServiceDate: Timestamp;
+  notifyAt: Timestamp;
+
+  notifiedAt: Timestamp | null;
+  notificationCount?: number;
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+>>>>>>> Stashed changes
 }

@@ -50,9 +50,10 @@ let query: Query =
 
 
 
-    // Manager only sees own branch
+    // Managers are always branch-scoped. Callers may also request branch
+    // scoping for workflows (such as attendance) that operate on one branch.
 
-    if (role === "manager") {
+    if (role === "manager" || request.data?.branchScoped === true) {
 
 
         if (!branchId) {

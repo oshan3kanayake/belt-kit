@@ -58,11 +58,6 @@ async(request)=>{
 
 
 
-    const role =
-        request.auth!.token.role;
-
-
-
     const branchId =
         request.auth!.token.branchId;
 
@@ -74,18 +69,20 @@ async(request)=>{
 
 
 
-    // Managers only see their branch
-
-    if(role === "manager"){
-
-        query =
-        query.where(
-            "branchId",
-            "==",
-            branchId
+    if(!branchId){
+        throw new HttpsError(
+            "failed-precondition",
+            "Branch not found"
         );
-
     }
+
+    // The attendance workspace always represents the authenticated active
+    // branch, including for owners. No arbitrary branch ID is accepted.
+    query = query.where(
+        "branchId",
+        "==",
+        branchId
+    );
 
 
 

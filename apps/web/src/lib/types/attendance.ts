@@ -1,5 +1,12 @@
 export type AttendanceStatus = "present" | "on_leave";
 
+export type SerializedTimestamp = {
+  seconds?: number;
+  nanoseconds?: number;
+  _seconds?: number;
+  _nanoseconds?: number;
+};
+
 export interface Attendance {
   id: string;
   employeeId: string;
@@ -7,6 +14,6 @@ export interface Attendance {
   date: string;
   status: AttendanceStatus;
   note?: string;
-  createdAt?: unknown;
-  updatedAt?: unknown;
+  createdAt?: SerializedTimestamp | string | null;
+  updatedAt?: SerializedTimestamp | string | null;
 }

@@ -6,7 +6,8 @@
 
 import { initializeApp } from "firebase-admin/app";
 
-initializeApp();
+const projectId = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
+initializeApp(projectId ? { projectId } : undefined);
 
 // User & role management (RBAC backbone)
 export { setUserRole, bootstrapFirstOwner } from "./users";
@@ -53,4 +54,65 @@ export {
 
 export {
     getAttendanceSummary
+<<<<<<< Updated upstream
 } from "./employees/attendanceSummary";
+=======
+} from "./employees/attendanceSummary";
+
+export {
+  downloadAttendanceReport,
+} from "./employees/attendanceReportPdf";
+
+export {
+createSupplier
+}
+from "./suppliers/supplierCreate";
+
+
+export {
+getSupplierList
+}
+from "./suppliers/supplierList";
+
+
+export {
+createPurchaseOrder
+}
+from "./suppliers/purchaseOrderCreate";
+
+
+export {
+createSupplierPayment
+}
+from "./suppliers/supplierPaymentCreate";
+
+
+export {
+getSupplierSummary
+}
+from "./suppliers/supplierSummary";
+
+export {
+  notifyLowStock,
+} from "./notifications/notifyLowStock";
+
+export {
+  createServiceReminder,
+} from "./notifications/createServiceReminder";
+
+export {
+  processServiceReminders,
+} from "./notifications/processServiceReminders";
+
+export {
+  markNotificationRead,
+} from "./notifications/markNotificationRead";
+
+export {
+  markAllNotificationsRead,
+} from "./notifications/markAllNotificationsRead";
+
+export {
+  notifyEmployeeOnLeave,
+} from "./notifications/notifyEmployeeOnLeave";
+>>>>>>> Stashed changes

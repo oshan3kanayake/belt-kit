@@ -16,6 +16,12 @@ type GetAttendanceListPayload = {
   month?: string;
 };
 
+export type SaveAttendanceResponse = {
+  success: boolean;
+  attendanceId: string;
+  operation: "created" | "updated";
+};
+
 type AttendanceSummaryResponse = {
   success: boolean;
   employeeId: string;
@@ -31,10 +37,7 @@ async function ensureAuthenticatedCallable() {
     throw new Error("No authenticated user available for attendance update.");
   }
 
-  console.log("[attendance] auth.currentUser", user);
-  const tokenResult = await user.getIdTokenResult(true);
-  console.log("[attendance] refreshed token result", tokenResult);
-  console.log("[attendance] token claims", tokenResult.claims);
+  await user.getIdToken(true);
   return user;
 }
 
@@ -42,7 +45,7 @@ export async function createAttendance(payload: CreateAttendancePayload) {
   await ensureAuthenticatedCallable();
   const fn = httpsCallable(functions, "createAttendance");
   const res = await fn(payload);
-  return res.data as { success: boolean; attendanceId?: string };
+  return res.data as SaveAttendanceResponse;
 }
 
 export async function getAttendanceList(params: GetAttendanceListPayload = {}) {

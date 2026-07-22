@@ -1,0 +1,10 @@
+{
+  "name": "belt-kit-local-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev-local.mjs",
+    "dev:emulators": "node scripts/dev-local.mjs",
+    "seed:demo": "npm --prefix functions run seed",
+    "build": "npm --prefix functions run build && npm --prefix apps/web run build"
+  }
+}

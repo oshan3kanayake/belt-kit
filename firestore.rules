@@ -119,6 +119,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Notification documents are created and mutated only by trusted backend
+    // functions. Clients may subscribe only to notifications addressed to them.
+    match /notifications/{id} {
+      allow read: if signedIn() && resource.data.recipientUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
