@@ -1,5 +1,6 @@
 /** Client-side model types (mirror of functions/src/types.ts). */
 import { Timestamp } from "firebase/firestore";
+import { Role } from "./auth-context";
 
 export interface Branch {
   name: string;
@@ -115,6 +116,42 @@ export interface Payment {
   method: "cash" | "card" | "bank_transfer" | "wallet";
   reference?: string;
   createdAt?: Timestamp;
+}
+
+// ---- Employees (client-side mirror for functions-backed employee APIs) ---
+export interface Employee {
+  id: string;
+  uid?: string;
+
+  // Some records use `displayName`, others use `fullName` — accept both.
+  fullName?: string;
+  displayName?: string;
+
+  email: string;
+  role: Role;
+
+  branchId: string;
+
+  phone?: string;
+
+  salaryMinor?: number; // stored in minor units (e.g., cents)
+
+  // backend may store joinDate as a string (ISO) or Timestamp
+  joinDate?: string | Timestamp | null;
+
+  active: boolean;
+  archived?: boolean;
+  createdAt?: Timestamp | unknown;
+}
+
+export interface EmployeePayment {
+  id?: string;
+  employeeId: string;
+  month: string; // e.g. "2026-07"
+  amountPaidMinor: number;
+  amountMinor?: number;
+  paidDate?: Timestamp | string | null;
+  createdAt?: Timestamp | unknown;
 }
 
 export const JOB_STATUS_META: Record<
