@@ -26,11 +26,15 @@ export async function verifyAssistantToken(token: string) {
   return getAuth(getAdminApp()).verifyIdToken(token);
 }
 
-/** The assistant is a technician-only tool; enforce that on the server. */
+/**
+ * The assistant is a staff tool. Owner, manager, front desk (advisor) and
+ * technician accounts may all use it; enforce that on the server.
+ */
 export async function verifyTechnicianToken(token: string) {
   const decoded = await getAuth(getAdminApp()).verifyIdToken(token);
   const user = await getFirestore(getAdminApp()).collection("users").doc(decoded.uid).get();
-  if (user.data()?.role !== "technician") {
+  const role = user.data()?.role;
+  if (!(role === "owner" || role === "manager" || role === "advisor" || role === "technician")) {
     throw new Error("TECHNICIAN_ONLY");
   }
   return decoded;

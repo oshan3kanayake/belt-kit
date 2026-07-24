@@ -108,13 +108,13 @@ export default function TechnicianAssistantPage() {
     return () => window.clearInterval(timer);
   }, [sending]);
 
-  if (roleResolved && role !== "technician") {
+  if (roleResolved && !(role === "owner" || role === "manager" || role === "advisor" || role === "technician")) {
     return (
       <div className="mx-auto max-w-xl">
         <EmptyState
           icon={ShieldAlert}
-          title="Technician access only"
-          hint="This assistant is available only to signed-in technician accounts."
+          title="Staff access only"
+          hint="This assistant is available to owner, manager, front desk and technician accounts."
         />
       </div>
     );

@@ -46,7 +46,7 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/job-cards/finished-jobs", label: "Finished Jobs", icon: ClipboardCheck, roles: ["owner","manager","advisor","technician","accountant"] },
   { href: "/dashboard/services",   label: "Services",       icon: ClipboardCheck,  roles: ["owner","manager","advisor","technician","accountant"] },
   { href: "/dashboard/workshop",   label: "Workshop Board", icon: Kanban,          roles: ["owner","manager","advisor","technician","accountant"] },
-  { href: "/dashboard/technician-assistant", label: "Technician Assistant", icon: Bot, roles: ["technician"] },
+  { href: "/dashboard/technician-assistant", label: "Technician Assistant", icon: Bot, roles: ["owner","manager","advisor","technician"] },
   { href: "/dashboard/customers",  label: "Customers",      icon: Users,           roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/vehicles",   label: "Vehicles",       icon: Car,             roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/inventory",  label: "Inventory",      icon: Package,         roles: ["owner","manager","advisor"] },
