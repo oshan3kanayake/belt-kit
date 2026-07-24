@@ -16,17 +16,17 @@ const READABLE: Record<Role, string[]> = {
   owner: [
     "jobCards", "jobCardLines", "customers", "vehicles",
     "parts", "stockMovements", "invoices", "payments", "users",
-    "branches", "auditLog",
+    "branches", "auditLog","services",
   ],
   manager: [
     "jobCards", "jobCardLines", "customers", "vehicles",
     "parts", "stockMovements", "invoices", "payments", "users",
-    "branches", "auditLog",
+    "branches", "auditLog","services",
   ],
   advisor: [
     "jobCards", "jobCardLines", "customers", "vehicles",
     "parts", "stockMovements", "invoices", "payments", "users",
-    "branches", "auditLog",
+    "branches", "auditLog","services",
   ],
   technician: ["jobCards", "jobCardLines", "parts", "branches"],
   accountant: [
@@ -71,3 +71,6 @@ export const canManageUsers = isOps;
 
 // Assign technicians to a job.
 export const canAssignTechnicians = isOps;
+
+export const canManageServices = (r: Role | null) =>
+  r === "owner" || r === "manager" || r === "advisor";

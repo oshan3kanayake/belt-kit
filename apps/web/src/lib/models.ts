@@ -1,5 +1,6 @@
 /** Client-side model types (mirror of functions/src/types.ts). */
 import { Timestamp } from "firebase/firestore";
+import { Role } from "./auth-context";
 
 export interface Branch {
   name: string;
@@ -43,19 +44,36 @@ export type JobStatus =
 
 export interface JobCard {
   branchId: string;
+
   customerId: string;
   vehicleId: string;
+
   complaint: string;
-  status: JobStatus;
+
+  // Part 1.2 additions
+  serviceTypeIds: string[];
+
   assignedTechnicianIds: string[];
+
+  startDate?: Timestamp | null;
+
+  promisedEndDate?: Timestamp | null;
+
+
+  status: JobStatus;
+
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
+
   invoiceId?: string | null;
-  /** Optional planned service date (for the dashboard calendar). */
+
   scheduledDate?: Timestamp | null;
+
   archived?: boolean;
   createdAt?: Timestamp;
+  actualEndDate?: Timestamp;
+  completionNotes?: string;
 }
 
 export interface JobCardLine {
@@ -82,6 +100,22 @@ export interface Part {
   lowStock: boolean;
   binLocation?: string;
   archived?: boolean;
+  createdAt?: Timestamp;
+}
+
+export interface ServiceType {
+  branchId: string;
+
+  name: string;
+
+  defaultPriceMinor: number;
+
+  estimatedDays: number;
+
+  active: boolean;
+
+  archived?: boolean;
+
   createdAt?: Timestamp;
 }
 
@@ -115,6 +149,42 @@ export interface Payment {
   method: "cash" | "card" | "bank_transfer" | "wallet";
   reference?: string;
   createdAt?: Timestamp;
+}
+
+// ---- Employees (client-side mirror for functions-backed employee APIs) ---
+export interface Employee {
+  id: string;
+  uid?: string;
+
+  // Some records use `displayName`, others use `fullName` — accept both.
+  fullName?: string;
+  displayName?: string;
+
+  email: string;
+  role: Role;
+
+  branchId: string;
+
+  phone?: string;
+
+  salaryMinor?: number; // stored in minor units (e.g., cents)
+
+  // backend may store joinDate as a string (ISO) or Timestamp
+  joinDate?: string | Timestamp | null;
+
+  active: boolean;
+  archived?: boolean;
+  createdAt?: Timestamp | unknown;
+}
+
+export interface EmployeePayment {
+  id?: string;
+  employeeId: string;
+  month: string; // e.g. "2026-07"
+  amountPaidMinor: number;
+  amountMinor?: number;
+  paidDate?: Timestamp | string | null;
+  createdAt?: Timestamp | unknown;
 }
 
 export const JOB_STATUS_META: Record<

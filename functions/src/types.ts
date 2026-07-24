@@ -176,3 +176,45 @@ export interface AuditLogEntry {
   after?: Record<string, unknown> | null;
   at: Timestamp;
 }
+
+// ---- Employee Payments -----------------------------------------------------
+
+export interface EmployeePayment {
+    employeeId: string;
+    branchId: string;
+
+    month: string; 
+    // Example: "2026-07"
+
+    amountPaidMinor: number;
+
+    paidDate: string;
+
+    createdBy: string;
+}
+
+// ---- Employee Payments ----------------------------------------------------
+
+export interface EmployeePayment extends BaseDoc {
+
+    // Employee who received payment
+    employeeId: string;
+
+
+    // Payment month
+    // Example: "2026-07"
+    month: string;
+
+
+    // Amount stored as minor units
+    // Example: 7500000 = LKR 75,000.00
+    amountPaidMinor: number;
+
+
+    // Actual payment date
+    datePaid: string;
+
+
+    // Optional note
+    note?: string;
+}
