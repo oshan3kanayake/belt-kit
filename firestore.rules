@@ -4,9 +4,14 @@ rules_version = '2';
 // BELT-KIT — Firestore Security Rules (free-tier, lean get() usage)
 // ----------------------------------------------------------------------------
 // role/branch come from /users/{uid}. To avoid exceeding Firestore's per-request
-// get() limit (which was denying created-user technicians), we read the user
-// doc AT MOST ONCE per request via a single helper, and drop branch scoping
-// (single-branch system) so no rule needs the doc's branchId.
+// get() limit, we read the user doc AT MOST ONCE per request via a single
+// helper. Single-branch system, so no rule needs the doc's branchId.
+//
+// Permission model (per team decision): OWNER, FRONT DESK (advisor) and
+// TECHNICIAN all have FULL access to the operational data (customers, vehicles,
+// jobs, job lines, parts, services, suppliers, employees, etc.). Manager and
+// accountant keep access too. Only genuinely dangerous actions (deleting staff,
+// editing branches) stay owner/manager-only.
 // ============================================================================
 
 service cloud.firestore {
@@ -26,22 +31,26 @@ service cloud.firestore {
         ? me().role : null;
     }
 
+    // Any signed-in staff member.
     function isStaff() {
       return myRole() in ['owner', 'manager', 'advisor', 'technician', 'accountant'];
     }
-    function isOps() { return myRole() in ['owner', 'manager', 'advisor']; }
-    function isFinance() { return myRole() in ['owner', 'manager', 'advisor', 'accountant']; }
-    function onlyChanged(fields) {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    // The full-access team: owner, front desk, technician (+ manager kept).
+    function isTeam() {
+      return myRole() in ['owner', 'manager', 'advisor', 'technician'];
+    }
+    // Finance actions: invoices + payments (team + accountant).
+    function isFinance() {
+      return myRole() in ['owner', 'manager', 'advisor', 'technician', 'accountant'];
     }
 
     // ---- Users -----------------------------------------------------------
     match /users/{userId} {
       allow read: if signedIn();                 // any signed-in user may read
-      allow create, update: if isOps()
+      allow create, update: if myRole() in ['owner', 'manager', 'advisor']
                     || (request.auth.uid == userId
                         && request.resource.data.role in ['owner', 'pending']);
-      allow delete: if myRole() in ['owner', 'manager'];
+      allow delete: if myRole() in ['owner', 'manager']; // deleting staff stays restricted
     }
 
     match /meta/{docId} {
@@ -51,54 +60,85 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---- Branches --------------------------------------------------------
+    // ---- Branches (structural — keep restricted) -------------------------
     match /branches/{branchId} {
       allow read: if signedIn();
       allow write: if myRole() in ['owner', 'manager'];
     }
 
-    // ---- Customers -------------------------------------------------------
+    // ---- Operational data: full access for the team ----------------------
+    // Customers
     match /customers/{id} {
       allow read: if isStaff();
-      allow create, update, delete: if isOps();
+      allow create, update, delete: if isTeam();
     }
-
-    // ---- Vehicles --------------------------------------------------------
+    // Vehicles
     match /vehicles/{id} {
       allow read: if isStaff();
-      allow create, update, delete: if isOps();
+      allow create, update, delete: if isTeam();
     }
-
-    // ---- Job Cards -------------------------------------------------------
+    // Job Cards — technicians can now fully update (photos, status, etc.)
     match /jobCards/{id} {
       allow read: if isStaff();
-      allow create: if isOps();
-      allow update: if isOps()
-                    || (myRole() == 'technician'
-                        && onlyChanged(['status', 'updatedAt', 'updatedByUid']))
-                    || (myRole() == 'accountant'
-                        && onlyChanged(['invoiceId', 'subtotalMinor', 'taxMinor',
-                                        'totalMinor', 'updatedAt', 'updatedByUid']));
-      allow delete: if isOps();
+      allow create, update, delete: if isTeam();
     }
-
-    // ---- Job card lines --------------------------------------------------
+    // Job card lines (labour & parts)
     match /jobCardLines/{id} {
       allow read: if isStaff();
-      allow create, update: if isOps() || myRole() == 'technician';
-      allow delete: if isOps();
+      allow create, update, delete: if isTeam();
     }
-
-    // ---- Inventory -------------------------------------------------------
+    // Inventory
     match /parts/{id} {
       allow read: if isStaff();
-      allow create, update, delete: if isOps();
+      allow create, update, delete: if isTeam();
     }
     match /stockMovements/{id} {
       allow read: if isStaff();
       allow create: if isStaff();
-      allow update: if false;
-      allow delete: if isOps();
+      allow update: if false;   // history never edited
+      allow delete: if isTeam();
+    }
+    // Services (service types offered by the garage)
+    match /services/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+
+    // ---- Upcoming new collections (pre-added so no future block) ----------
+    // Suppliers
+    match /suppliers/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+    // Purchase orders (to suppliers)
+    match /purchaseOrders/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+    // Employees
+    match /employees/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+    // Employee pay records
+    match /employeePayments/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+    // Attendance / leave
+    match /attendance/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
+    }
+    // In-app notifications
+    match /notifications/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isStaff();
+    }
+    // Job photos (before/after) — if stored as their own collection
+    match /jobPhotos/{id} {
+      allow read: if isStaff();
+      allow create, update, delete: if isTeam();
     }
 
     // ---- Billing ---------------------------------------------------------
@@ -119,6 +159,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Everything else is denied.
     match /{document=**} {
       allow read, write: if false;
     }
