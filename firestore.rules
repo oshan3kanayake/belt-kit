@@ -43,6 +43,13 @@ service cloud.firestore {
     function isFinance() {
       return myRole() in ['owner', 'manager', 'advisor', 'technician', 'accountant'];
     }
+    // True when an update touches ONLY the whitelisted fields (nothing else
+    // changed). Used to keep generated invoice amounts immutable while still
+    // letting a payment update the balance + status.
+    function onlyChanged(allowedKeys) {
+      return request.resource.data.diff(resource.data)
+               .affectedKeys().hasOnly(allowedKeys);
+    }
     function validInvoiceState(data) {
       return data.subtotalMinor is int && data.subtotalMinor >= 0
              && data.taxMinor is int && data.taxMinor >= 0
