@@ -21,11 +21,13 @@ import {
   Command,
   Zap,
   ChevronRight,
+  CalendarCheck2,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
 import { CommandBar } from "@/components/CommandBar";
 import { GearLoader } from "@/components/ui";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 type NavItem = {
   href: string;
@@ -66,6 +68,7 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/inventory",  label: "Inventory",     icon: Package,         roles: ["owner","manager","advisor"] },
   { href: "/dashboard/billing",    label: "Billing",       icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/employees",  label: "Employees",     icon: UserCog,         roles: ["owner","manager"] },
+  { href: "/dashboard/employees/attendance", label: "Attendance", icon: CalendarCheck2, roles: ["owner","manager"] },
   { href: "/dashboard/users",      label: "Users & Roles", icon: UserCog,         roles: ["owner","manager"] },
 ];
 
@@ -228,17 +231,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line bg-white px-6 py-4 lg:hidden">
           <span className="text-[15px] font-bold tracking-tight text-ink">Belt-Kit</span>
-          <button onClick={() => logout()} className="text-ink-soft hover:text-burgundy-500">
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button onClick={() => logout()} className="p-2 text-ink-soft hover:text-burgundy-500" aria-label="Sign out">
+              <LogOut size={18} />
+            </button>
+          </div>
         </header>
 
-        <div className="hidden lg:flex items-center border-b border-line bg-white px-8 py-3 shadow-soft">
+        <div className="hidden lg:flex items-center justify-between border-b border-line bg-white px-8 py-3 shadow-soft">
           <div className="flex items-center gap-2 text-xs text-ink-faint">
             <span className="font-semibold text-ink">Dashboard</span>
             <ChevronRight size={12} />
             <span>{CORE_NAV.find((n) => n.href === pathname)?.label ?? "Overview"}</span>
           </div>
+          <NotificationBell />
         </div>
 
         <motion.main

@@ -46,6 +46,20 @@ export function formatDateTime(
   }).format(d);
 }
 
+export function formatRelativeTime(
+  ts?: { toDate: () => Date } | Date | null,
+  now = new Date(),
+): string {
+  if (!ts) return "Just now";
+  const date = ts instanceof Date ? ts : ts.toDate();
+  const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (elapsedSeconds < 60) return "Just now";
+  if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)}m ago`;
+  if (elapsedSeconds < 86400) return `${Math.floor(elapsedSeconds / 3600)}h ago`;
+  if (elapsedSeconds < 604800) return `${Math.floor(elapsedSeconds / 86400)}d ago`;
+  return formatDateTime(date);
+}
+
 export function initials(name?: string): string {
   if (!name) return "?";
   return name

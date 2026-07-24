@@ -64,9 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resolveRole = useCallback(async (u: User) => {
     setRoleResolved(false);
     try {
-      const token = await u.getIdTokenResult();
+      const token = await u.getIdTokenResult(true);
       const claimRole = (token.claims.role as Role) ?? null;
       const claimBranch = (token.claims.branchId as string) ?? null;
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[auth] current firebase user:", u.uid, u.email);
+        console.log("[auth] refreshed firebase claims:", token.claims);
+      }
 
       let docRole: Role | null = null;
       let docBranch: string | null = null;

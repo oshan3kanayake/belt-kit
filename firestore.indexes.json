@@ -47,6 +47,32 @@
         { "fieldPath": "branchId", "order": "ASCENDING" },
         { "fieldPath": "invoiceId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "serviceReminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "notifiedAt", "order": "ASCENDING" },
+        { "fieldPath": "notifyAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientUid", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientUid", "order": "ASCENDING" },
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "isRead", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
