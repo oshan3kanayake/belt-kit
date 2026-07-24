@@ -25,6 +25,7 @@ import {
   CalendarCheck2,
   Kanban,
   Bot,
+  Truck,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
@@ -53,6 +54,7 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/reports",    label: "Reports",        icon: BarChart3,       roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/employees",  label: "Employees",      icon: UserCog,         roles: ["owner","manager"] },
   { href: "/dashboard/employees/attendance", label: "Attendance", icon: CalendarCheck2, roles: ["owner","manager"] },
+  { href: "/dashboard/suppliers",  label: "Suppliers",      icon: Truck,           roles: ["owner","manager"] },
   { href: "/dashboard/users",      label: "Users & Roles",  icon: UserCog,         roles: ["owner","manager"] },
 ];
 
