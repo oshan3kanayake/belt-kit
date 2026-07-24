@@ -60,7 +60,12 @@ export interface JobCard {
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
-
+  /** Pricing choices made on the job card before its invoice is generated. */
+  taxRatePercent?: number;
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  discountValue?: number;
+  discountMinor?: number;
   invoiceId?: string | null;
 
   // Scheduling / dates.
@@ -121,21 +126,73 @@ export interface Part {
 
 export interface ServiceType {
   branchId: string;
-
   name: string;
-
   defaultPriceMinor: number;
-
   estimatedDays: number;
-
   active: boolean;
-
   archived?: boolean;
+  createdAt?: Timestamp;
+}
 
+export interface StockMovement {
+  branchId: string;
+  partId: string;
+  delta: number;
+  reason: "job_use" | "purchase" | "adjustment" | "return";
+  jobCardId?: string | null;
+  archived?: boolean;
+  createdAt?: Timestamp;
+}
+
+export type AssistantMessageRole = "user" | "assistant";
+
+export interface AssistantAnswer {
+  summary: string;
+  urgency: "routine" | "soon" | "stop_and_inspect";
+  likelyCauses: string[];
+  nextChecks: string[];
+  toolsOrParts: string[];
+  safetyWarning: string | null;
+  followUpQuestion: string;
+}
+
+export interface AssistantChat {
+  branchId: string;
+  ownerUid: string;
+  title: string;
+  lastMessagePreview?: string;
+  updatedAt?: Timestamp;
+  createdAt?: Timestamp;
+  archived?: boolean;
+}
+
+export interface AssistantAttachment {
+  name: string;
+  mimeType: string;
+  size: number;
+  /** Stored metadata only; the file content is sent to Ollama per request. */
+}
+
+export interface AssistantMessage {
+  branchId: string;
+  chatId: string;
+  ownerUid: string;
+  role: AssistantMessageRole;
+  content: string;
+  answer?: AssistantAnswer;
+  sources?: string[];
+  attachments?: AssistantAttachment[];
   createdAt?: Timestamp;
 }
 
 export type InvoiceStatus = "draft" | "issued" | "part_paid" | "paid" | "void";
+
+export type DiscountType = "percent" | "fixed";
+
+export interface ExtraCharge {
+  description: string;
+  amountMinor: number;
+}
 
 export interface Invoice {
   branchId: string;
@@ -147,11 +204,23 @@ export interface Invoice {
   taxMinor: number;
   totalMinor: number;
   amountPaidMinor: number;
+  /** Tax percentage frozen when the invoice is created. */
+  taxRatePercent?: number;
+  /** Optional manual charges and discount. Missing on legacy invoices. */
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  /** Percentage points for percent discounts; minor units for fixed discounts. */
+  discountValue?: number;
+  discountMinor?: number;
   lines: Array<{
     description: string;
     quantity: number;
     unitPriceMinor: number;
     lineTotalMinor: number;
+    kind?: "labor" | "part";
+    partId?: string | null;
+    /** Part cost frozen at invoice time for stable profit reporting. */
+    costPriceMinor?: number;
   }>;
   archived?: boolean;
   createdAt?: Timestamp;
@@ -164,6 +233,9 @@ export interface Payment {
   amountMinor: number;
   method: "cash" | "card" | "bank_transfer" | "wallet";
   reference?: string;
+  /** Safe display metadata only. Full card details and CVV are never stored. */
+  cardLast4?: string;
+  provider?: string;
   createdAt?: Timestamp;
 }
 

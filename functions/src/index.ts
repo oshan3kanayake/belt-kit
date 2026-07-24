@@ -54,9 +54,6 @@ export {
 
 export {
     getAttendanceSummary
-<<<<<<< Updated upstream
-} from "./employees/attendanceSummary";
-=======
 } from "./employees/attendanceSummary";
 
 export {
@@ -115,4 +112,3 @@ export {
 export {
   notifyEmployeeOnLeave,
 } from "./notifications/notifyEmployeeOnLeave";
->>>>>>> Stashed changes

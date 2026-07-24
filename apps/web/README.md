@@ -27,6 +27,43 @@ Leave `NEXT_PUBLIC_USE_EMULATOR=false` to use real cloud, or set `true` for the 
 npm install
 ```
 
+### 4. Install Ollama for the Technician Assistant
+
+The Technician Assistant is a real local AI feature. It uses Ollama on the
+same computer as the Next.js app, so it does not send workshop questions to a
+public AI provider.
+
+1. Install Ollama from <https://ollama.com/download>. On Linux, you can use:
+   ```bash
+   curl -fsSL https://ollama.com/install.sh | sh
+   ```
+2. Start Ollama (the desktop application, or `ollama serve` on Linux).
+3. Download the required chat and retrieval models:
+   ```bash
+   ollama pull qwen3:4b
+   ollama pull embeddinggemma
+   ```
+   To enable image analysis from the attachment button, also download the
+   optional vision model:
+   ```bash
+   ollama pull qwen2.5vl:3b
+   ```
+4. Copy the Ollama variables from `.env.local.example` into `.env.local`.
+   The defaults work when Ollama is on the same machine.
+5. Verify before starting the web app:
+   ```bash
+   npm run ollama:check
+   ```
+
+For a deployed Next.js server, set the server-only
+`FIREBASE_SERVICE_ACCOUNT_JSON` environment variable so the assistant API can
+verify Firebase ID tokens. Local emulator development does not need this key.
+
+The assistant will show an honest “Local AI unavailable” message when Ollama
+or a required model is not running. It will not return hardcoded advice. Text
+and Markdown attachments are included in the prompt; image interpretation
+uses the optional vision model above.
+
 ---
 
 ## Create the default login accounts
@@ -66,6 +103,24 @@ Firestore, repairs all demo users and their claims/profiles, verifies every
 login, and only then starts the frontend. The seed does not depend on saved
 emulator data, although clean shutdowns are also exported to
 `.firebase/emulator-data`.
+
+For the full local prototype with the Technician Assistant, use three terminals:
+
+```bash
+# Terminal 1: Ollama
+ollama serve
+
+# Terminal 2: Firebase emulators
+cd functions && npm run serve
+
+# Terminal 3: Next.js web app
+cd apps/web && npm run dev
+```
+
+After login, open **Technician Assistant** from the sidebar. Select a job card
+and ask a repair question. The response is grounded with job, vehicle, current
+inventory, and local workshop reference notes. Review all advice against the
+manufacturer manual and workshop safety procedure.
 
 ---
 

@@ -42,14 +42,15 @@ export interface WithId {
 export function useCollection<T = DocumentData>(
   path: string,
   extra: QueryConstraint[] = [],
-  includeArchived = false
+  includeArchived = false,
+  dependencyKey?: string
 ) {
   const { branchId, role, roleResolved } = useAuth();
   const [data, setData] = useState<(T & WithId)[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const extraKey = JSON.stringify(
+  const extraKey = dependencyKey ?? JSON.stringify(
     extra.map((c) => (c as unknown as { _field?: string })._field ?? "")
   );
 

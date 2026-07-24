@@ -114,6 +114,24 @@ npm run serve
 
 Then open the emulator dashboard at <http://localhost:4000>. You can create test users, watch documents appear, and see function logs live.
 
+### Technician Assistant local requirement
+
+The web dashboard includes a local Ollama-powered Technician Assistant. A
+fresh clone must install Ollama separately from <https://ollama.com/download>,
+start it, and download the models used by the assistant:
+
+```bash
+ollama pull qwen3:4b
+ollama pull embeddinggemma
+# Optional, for image attachments in the assistant:
+ollama pull qwen2.5vl:3b
+```
+
+The full setup, environment variables, health check, and local run commands
+are documented in [`apps/web/README.md`](apps/web/README.md). The assistant
+shows a clear unavailable state when Ollama or either model is missing; it does
+not substitute hardcoded diagnostic answers.
+
 ---
 
 ## Creating your first login (the bootstrap step)

@@ -15,6 +15,7 @@ import {
   Car,
   Package,
   Receipt,
+  BarChart3,
   UserCog,
   LogOut,
   Search,
@@ -23,6 +24,7 @@ import {
   ChevronRight,
   CalendarCheck2,
   Kanban,
+  Bot,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
@@ -43,10 +45,12 @@ const CORE_NAV: NavItem[] = [
   { href: "/dashboard/job-cards/finished-jobs", label: "Finished Jobs", icon: ClipboardCheck, roles: ["owner","manager","advisor","technician","accountant"] },
   { href: "/dashboard/services",   label: "Services",       icon: ClipboardCheck,  roles: ["owner","manager","advisor","technician","accountant"] },
   { href: "/dashboard/workshop",   label: "Workshop Board", icon: Kanban,          roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/technician-assistant", label: "Technician Assistant", icon: Bot, roles: ["technician"] },
   { href: "/dashboard/customers",  label: "Customers",      icon: Users,           roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/vehicles",   label: "Vehicles",       icon: Car,             roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/inventory",  label: "Inventory",      icon: Package,         roles: ["owner","manager","advisor"] },
   { href: "/dashboard/billing",    label: "Billing",        icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
+  { href: "/dashboard/reports",    label: "Reports",        icon: BarChart3,       roles: ["owner","manager","advisor","accountant"] },
   { href: "/dashboard/employees",  label: "Employees",      icon: UserCog,         roles: ["owner","manager"] },
   { href: "/dashboard/employees/attendance", label: "Attendance", icon: CalendarCheck2, roles: ["owner","manager"] },
   { href: "/dashboard/users",      label: "Users & Roles",  icon: UserCog,         roles: ["owner","manager"] },

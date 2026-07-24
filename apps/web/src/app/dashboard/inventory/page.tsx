@@ -10,13 +10,16 @@ import {
   Boxes,
   TrendingUp,
   TrendingDown,
+  CircleAlert,
+  History,
+  ArrowUpRight,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCollection } from "@/lib/useCollection";
 import { createDoc, updateDocById, deleteDocById } from "@/lib/db-write";
-import { Part } from "@/lib/models";
+import { Part, StockMovement } from "@/lib/models";
 import { canManageInventory } from "@/lib/permissions";
-import { formatMoney, toMinor } from "@/lib/format";
+import { formatMoney, formatDateTime, toMinor } from "@/lib/format";
 import {
   PageHeader,
   Modal,
@@ -36,6 +39,7 @@ import { MiniBar, StatCard, VIZ } from "@/components/charts";
 export default function InventoryPage() {
   const { branchId, role } = useAuth();
   const { data: parts, loading, error } = useCollection<Part>("parts");
+  const { data: movements } = useCollection<StockMovement>("stockMovements");
   const { notify } = useToast();
 
   const [search, setSearch] = useState("");
@@ -64,6 +68,27 @@ export default function InventoryPage() {
   const stockValue = parts.reduce(
     (s, p) => s + p.sellPriceMinor * p.quantityOnHand,
     0
+  );
+  const costValue = parts.reduce(
+    (sum, part) => sum + part.costPriceMinor * part.quantityOnHand,
+    0
+  );
+  const outOfStockCount = parts.filter((part) => part.quantityOnHand === 0).length;
+  const potentialMargin = stockValue - costValue;
+  const attentionParts = useMemo(
+    () =>
+      parts
+        .filter((part) => part.lowStock || part.quantityOnHand === 0)
+        .sort((left, right) => left.quantityOnHand - right.quantityOnHand)
+        .slice(0, 5),
+    [parts]
+  );
+  const recentMovements = useMemo(
+    () =>
+      [...movements]
+        .sort((left, right) => (right.createdAt?.toMillis?.() ?? 0) - (left.createdAt?.toMillis?.() ?? 0))
+        .slice(0, 5),
+    [movements]
   );
   const stockBars = useMemo(
     () =>
@@ -125,12 +150,13 @@ export default function InventoryPage() {
       align: "center",
       sortValue: (p) => p.quantityOnHand,
       cell: (p) => (
-        <span>
-          <span className={`font-semibold ${p.lowStock ? "text-amber-600" : "text-ink"}`}>
-            {p.quantityOnHand}
-          </span>
+        <div className="min-w-28">
+          <span className={`font-semibold ${p.lowStock ? "text-amber-600" : "text-ink"}`}>{p.quantityOnHand}</span>
           <span className="text-ink-faint"> / {p.reorderThreshold}</span>
-        </span>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-muted">
+            <div className={`h-full rounded-full ${p.lowStock ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${Math.min(100, p.reorderThreshold > 0 ? (p.quantityOnHand / (p.reorderThreshold * 2)) * 100 : 100)}%` }} />
+          </div>
+        </div>
       ),
     },
   ];
@@ -251,8 +277,44 @@ export default function InventoryPage() {
               icon={<Boxes size={16} />}
               accent={VIZ.emerald}
             />
+            <StatCard
+              label="Out of stock"
+              value={String(outOfStockCount)}
+              hint="Needs ordering now"
+              icon={<CircleAlert size={16} />}
+              accent={VIZ.rose}
+            />
           </div>
         </div>
+      )}
+
+      {parts.length > 0 && (
+        <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)]">
+          <section className="card p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-ink">Needs attention</h2>
+                <p className="mt-0.5 text-xs text-ink-faint">Low and out-of-stock parts that may delay job cards.</p>
+              </div>
+              <button onClick={() => setStockFilter("low")} className="text-xs font-semibold text-burgundy-600 hover:text-burgundy-700">View low stock <ArrowUpRight size={13} className="inline" /></button>
+            </div>
+            {attentionParts.length ? <div className="mt-4 divide-y divide-line rounded-xl border border-line">{attentionParts.map((part) => {
+              const suggested = Math.max(1, part.reorderThreshold * 2 - part.quantityOnHand);
+              return <div key={part.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"><div><p className="text-sm font-medium text-ink">{part.name}</p><p className="text-xs text-ink-faint">{part.sku} · Bin {part.binLocation || "not set"}</p></div><div className="flex items-center gap-4"><div className="text-right"><p className={`text-sm font-semibold ${part.quantityOnHand === 0 ? "text-rose-600" : "text-amber-600"}`}>{part.quantityOnHand} in stock</p><p className="text-xs text-ink-faint">Suggested order: {suggested}</p></div>{canEdit && <button onClick={() => setStockPart(part)} className="btn-ghost px-3 py-2 text-xs"><Boxes size={14} /> Receive</button>}</div></div>;
+            })}</div> : <div className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 p-5 text-sm text-emerald-700">All current parts are above their reorder level.</div>}
+          </section>
+          <section className="card p-6">
+            <div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><TrendingUp size={18} /></div><div><p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Potential stock margin</p><p className="mt-1 text-2xl font-bold text-ink">{formatMoney(potentialMargin)}</p><p className="mt-1 text-xs text-ink-faint">Retail value {formatMoney(stockValue)} minus cost value {formatMoney(costValue)}</p></div></div>
+            <div className="mt-5 rounded-xl bg-surface-muted p-4"><p className="text-sm font-semibold text-ink">Quick actions</p><div className="mt-3 grid grid-cols-2 gap-2">{canEdit && <button onClick={() => { setEditing(null); setModalOpen(true); }} className="btn-ghost justify-center px-3 py-2 text-xs"><Plus size={14} /> Add part</button>}<button onClick={() => setStockFilter("low")} className="btn-ghost justify-center px-3 py-2 text-xs"><AlertTriangle size={14} /> Reorder queue</button></div></div>
+          </section>
+        </div>
+      )}
+
+      {parts.length > 0 && (
+        <section className="card mb-5 p-6">
+          <div className="flex items-center gap-2"><History size={17} className="text-burgundy-600" /><div><h2 className="text-base font-semibold text-ink">Recent stock activity</h2><p className="text-xs text-ink-faint">Latest purchases and manual adjustments.</p></div></div>
+          {recentMovements.length ? <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">{recentMovements.map((movement) => { const part = parts.find((item) => item.id === movement.partId); return <div key={movement.id} className="rounded-xl border border-line bg-surface p-3"><div className="flex items-center justify-between gap-2"><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${movement.delta >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{movement.delta >= 0 ? `+${movement.delta}` : movement.delta}</span><span className="text-[10px] uppercase tracking-wide text-ink-faint">{movement.reason.replace("_", " ")}</span></div><p className="mt-2 truncate text-sm font-medium text-ink">{part?.name ?? "Removed part"}</p><p className="mt-1 text-xs text-ink-faint">{formatDateTime(movement.createdAt)}</p></div>; })}</div> : <p className="mt-4 text-sm text-ink-faint">No stock movements recorded yet.</p>}
+        </section>
       )}
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

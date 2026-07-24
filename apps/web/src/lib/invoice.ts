@@ -26,13 +26,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
-import { JobCard, JobCardLine, Branch } from "./models";
+import { JobCard, JobCardLine, Branch, Part } from "./models";
+import { calculateInvoiceTotals } from "./billing-calculations";
 
 interface BranchDoc extends Branch {}
 
 export async function generateInvoiceClient(
-  jobCardId: string,
-  branchTaxPercentFallback = 18
+  jobCardId: string
 ): Promise<string> {
   const jobRef = doc(db, "jobCards", jobCardId);
   const jobSnap = await getDoc(jobRef);
@@ -46,8 +46,25 @@ export async function generateInvoiceClient(
   const branch = branchSnap.exists()
     ? (branchSnap.data() as BranchDoc)
     : null;
-  const currency = branch?.currency ?? "LKR";
-  const taxPercent = branch?.taxRatePercent ?? branchTaxPercentFallback;
+  if (!branch) {
+    throw new Error("Branch settings could not be found. Set the branch tax rate before invoicing.");
+  }
+  if (
+    typeof branch.taxRatePercent !== "number" ||
+    !Number.isFinite(branch.taxRatePercent) ||
+    branch.taxRatePercent < 0 ||
+    branch.taxRatePercent > 100
+  ) {
+    throw new Error("Set a valid branch tax rate between 0% and 100% before invoicing.");
+  }
+  const currency = branch.currency || "LKR";
+  const taxPercent =
+    typeof job.taxRatePercent === "number" &&
+    Number.isFinite(job.taxRatePercent) &&
+    job.taxRatePercent >= 0 &&
+    job.taxRatePercent <= 100
+      ? job.taxRatePercent
+      : branch.taxRatePercent;
 
   // Lines for this job card.
   const linesSnap = await getDocs(
@@ -60,19 +77,47 @@ export async function generateInvoiceClient(
   if (activeLines.length === 0)
     throw new Error("Cannot invoice a job card with no line items.");
 
+  // Freeze part costs as well as selling prices so future profit reports do not
+  // change when the inventory catalogue is edited.
+  const partIds = Array.from(
+    new Set(
+      activeLines
+        .filter((line) => line.kind === "part" && line.partId)
+        .map((line) => line.partId as string)
+    )
+  );
+  const partSnaps = await Promise.all(
+    partIds.map((partId) => getDoc(doc(db, "parts", partId)))
+  );
+  const partCosts = new Map<string, number>();
+  partSnaps.forEach((snap) => {
+    if (snap.exists()) {
+      partCosts.set(snap.id, (snap.data() as Part).costPriceMinor ?? 0);
+    }
+  });
+
   let subtotalMinor = 0;
   const lines = activeLines.map((l) => {
     subtotalMinor += l.lineTotalMinor;
+    const costPriceMinor = l.partId ? partCosts.get(l.partId) : undefined;
     return {
       description: l.description,
       quantity: l.quantity,
       unitPriceMinor: l.unitPriceMinor,
       lineTotalMinor: l.lineTotalMinor,
+      kind: l.kind,
+      ...(l.partId ? { partId: l.partId } : {}),
+      ...(costPriceMinor !== undefined ? { costPriceMinor } : {}),
     };
   });
 
-  const taxMinor = Math.round(subtotalMinor * (taxPercent / 100));
-  const totalMinor = subtotalMinor + taxMinor;
+  const totals = calculateInvoiceTotals({
+    baseSubtotalMinor: subtotalMinor,
+    extraCharges: job.extraCharges,
+    discountType: job.discountType,
+    discountValue: job.discountValue,
+    taxRatePercent: taxPercent,
+  });
   const uid = auth.currentUser?.uid ?? "unknown";
 
   // Atomic: create the invoice and link it back onto the job card together.
@@ -89,9 +134,14 @@ export async function generateInvoiceClient(
       status: "issued",
       currency,
       subtotalMinor,
-      taxMinor,
-      totalMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
       amountPaidMinor: 0,
+      taxRatePercent: totals.taxRatePercent,
+      extraCharges: totals.extraCharges,
+      discountType: totals.discountType,
+      discountValue: totals.discountValue,
+      discountMinor: totals.discountMinor,
       lines,
       archived: false,
       createdByUid: uid,
@@ -101,8 +151,8 @@ export async function generateInvoiceClient(
     tx.update(jobRef, {
       invoiceId: invoiceRef.id,
       subtotalMinor,
-      taxMinor,
-      totalMinor,
+      taxMinor: totals.taxMinor,
+      totalMinor: totals.totalMinor,
       updatedAt: serverTimestamp(),
     });
   });

@@ -1,15 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { doc, getDoc, onSnapshot, collection, getDocs, query, where as fsWhere } from "firebase/firestore";
-import { ArrowLeft, User, Plus, Wallet, ClipboardList, Banknote, CreditCard, Trash2 } from "lucide-react";
-import { db } from "@/lib/firebase";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  collection,
+  getDocs,
+  query,
+  where as fsWhere,
+  runTransaction,
+  serverTimestamp,
+} from "firebase/firestore";
+import {
+  ArrowLeft,
+  User,
+  Plus,
+  Wallet,
+  ClipboardList,
+  Banknote,
+  CreditCard,
+  Trash2,
+  Landmark,
+  Smartphone,
+} from "lucide-react";
+import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { useCollection, where } from "@/lib/useCollection";
-import { createDoc, updateDocById, deleteDocById } from "@/lib/db-write";
-import { Invoice, Customer, Payment } from "@/lib/models";
+import { updateDocById, deleteDocById } from "@/lib/db-write";
+import {
+  Invoice,
+  Customer,
+  Payment,
+} from "@/lib/models";
 import { formatMoney, formatDateTime, toMinor } from "@/lib/format";
 import {
   CenterSpinner,
@@ -20,10 +45,39 @@ import {
   ConfirmDialog,
   useToast,
 } from "@/components/ui";
-import { CardTerminal } from "@/components/CardTerminal";
+import {
+  PaymentTerminal,
+  SimulatedPaymentResult,
+} from "@/components/PaymentTerminal";
 
-// Only two live methods now: cash and (mock) card.
-type PayMethod = "cash" | "card";
+type PayMethod = Payment["method"];
+
+const PAYMENT_METHODS = [
+  {
+    method: "cash" as const,
+    label: "Cash",
+    hint: "Confirm at the counter",
+    icon: Banknote,
+  },
+  {
+    method: "card" as const,
+    label: "Card",
+    hint: "Demo card checkout",
+    icon: CreditCard,
+  },
+  {
+    method: "bank_transfer" as const,
+    label: "Bank transfer",
+    hint: "Simulated verification",
+    icon: Landmark,
+  },
+  {
+    method: "wallet" as const,
+    label: "Mobile wallet",
+    hint: "Demo QR payment",
+    icon: Smartphone,
+  },
+];
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +94,7 @@ export default function InvoiceDetailPage() {
   const [payAmountStr, setPayAmountStr] = useState("");
   const [showTerminal, setShowTerminal] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const paymentInFlight = useRef(false);
 
   const { data: payments } = useCollection<Payment>("payments", [
     where("invoiceId", "==", id),
@@ -47,6 +102,7 @@ export default function InvoiceDetailPage() {
 
   const canPay =
     role === "owner" || role === "manager" || role === "advisor" || role === "accountant";
+
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "invoices", id), async (snap) => {
@@ -66,41 +122,85 @@ export default function InvoiceDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Records a payment (used by both Cash and the mock Card terminal).
-  async function recordPayment(method: PayMethod, amountMinor: number) {
-    if (!invoice) return;
+  // Atomically records a payment and updates the invoice balance. This avoids
+  // duplicate or partially-saved payments during the simulated online flow.
+  async function recordPayment(
+    method: PayMethod,
+    amountMinor: number,
+    result?: SimulatedPaymentResult
+  ) {
+    if (!invoice || paymentInFlight.current) return;
     if (amountMinor <= 0) {
       notify("Enter a valid amount.", "error");
       return;
     }
+    paymentInFlight.current = true;
     setSaving(true);
     try {
-      await createDoc("payments", invoice.branchId, {
-        invoiceId: id,
-        customerId: invoice.customerId,
-        amountMinor,
-        method,
-        reference: method === "card" ? "Card · demo terminal" : undefined,
+      const invoiceRef = doc(db, "invoices", id);
+      const paymentRef = doc(collection(db, "payments"));
+      const auditRef = doc(collection(db, "auditLog"));
+      const uid = auth.currentUser?.uid ?? "unknown";
+
+      await runTransaction(db, async (tx) => {
+        const freshSnap = await tx.get(invoiceRef);
+        if (!freshSnap.exists()) throw new Error("Invoice no longer exists.");
+        const fresh = freshSnap.data() as Invoice;
+        if (fresh.status === "void") throw new Error("A void invoice cannot be paid.");
+
+        const currentPaid = fresh.amountPaidMinor ?? 0;
+        const currentDue = Math.max(0, fresh.totalMinor - currentPaid);
+        if (amountMinor > currentDue) {
+          throw new Error(`Payment cannot exceed ${formatMoney(currentDue, fresh.currency)}.`);
+        }
+
+        const newPaid = currentPaid + amountMinor;
+        const status = newPaid >= fresh.totalMinor ? "paid" : "part_paid";
+        const paymentData = {
+          branchId: fresh.branchId,
+          invoiceId: id,
+          customerId: fresh.customerId,
+          amountMinor,
+          method,
+          ...(result?.reference ? { reference: result.reference } : {}),
+          ...(result?.cardLast4 ? { cardLast4: result.cardLast4 } : {}),
+          ...(result?.provider ? { provider: result.provider } : {}),
+          archived: false,
+          createdByUid: uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        tx.set(paymentRef, paymentData);
+        tx.update(invoiceRef, {
+          amountPaidMinor: newPaid,
+          status,
+          updatedByUid: uid,
+          updatedAt: serverTimestamp(),
+        });
+        tx.set(auditRef, {
+          branchId: fresh.branchId,
+          actorUid: uid,
+          action: "payment.created",
+          entityType: "payment",
+          entityId: paymentRef.id,
+          after: { invoiceId: id, amountMinor, method },
+          at: serverTimestamp(),
+        });
       });
-      const newPaid = invoice.amountPaidMinor + amountMinor;
-      const status =
-        newPaid >= invoice.totalMinor
-          ? "paid"
-          : newPaid > 0
-          ? "part_paid"
-          : invoice.status;
-      await updateDocById("invoices", id, {
-        amountPaidMinor: newPaid,
-        status,
-      });
-      notify(
-        method === "card" ? "Card payment approved." : "Payment recorded."
-      );
+
+      const label = method.replace("_", " ");
+      notify(`${label[0].toUpperCase()}${label.slice(1)} payment recorded.`);
       setPayModal(false);
       setShowTerminal(false);
-    } catch {
-      notify("Could not record payment.", "error");
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : "Could not record payment.",
+        "error"
+      );
+      throw error;
     } finally {
+      paymentInFlight.current = false;
       setSaving(false);
     }
   }
@@ -118,10 +218,17 @@ export default function InvoiceDetailPage() {
       notify("Enter a valid amount.", "error");
       return;
     }
-    if (payMethod === "card") {
-      setShowTerminal(true); // launches the virtual terminal
+    if (amountMinor > due) {
+      notify(`Payment cannot exceed ${formatMoney(due, invoice?.currency)}.`, "error");
+      return;
+    }
+    if (payMethod !== "cash") {
+      setShowTerminal(true);
     } else {
-      recordPayment("cash", amountMinor);
+      void recordPayment("cash", amountMinor, {
+        reference: `CASH-${Date.now().toString().slice(-8)}`,
+        provider: "Cash counter",
+      }).catch(() => {});
     }
   }
 
@@ -155,11 +262,14 @@ export default function InvoiceDetailPage() {
       </div>
     );
 
-  const due = invoice.totalMinor - invoice.amountPaidMinor;
-
+  const due = Math.max(0, invoice.totalMinor - invoice.amountPaidMinor);
+  const extraChargesTotal = (invoice.extraCharges ?? []).reduce(
+    (total, charge) => total + (charge.amountMinor ?? 0),
+    0
+  );
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button
           onClick={() => router.push("/dashboard/billing")}
           className="flex items-center gap-2 font-sans text-sm text-ink-soft transition hover:text-burgundy-600"
@@ -167,13 +277,15 @@ export default function InvoiceDetailPage() {
           <ArrowLeft size={16} /> All invoices
         </button>
         {canPay && (
-          <button
-            onClick={() => setDeleteOpen(true)}
-            className="btn-ghost px-3 py-2 text-xs"
-            title="Delete invoice"
-          >
-            <Trash2 size={15} /> Delete invoice
-          </button>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="btn-ghost px-3 py-2 text-xs"
+              title="Delete invoice"
+            >
+              <Trash2 size={15} /> Delete invoice
+            </button>
+          </div>
         )}
       </div>
 
@@ -243,6 +355,23 @@ export default function InvoiceDetailPage() {
                   </td>
                 </tr>
               ))}
+              {(invoice.extraCharges ?? []).map((charge, idx) => (
+                <tr key={`extra-${idx}`} className="bg-amber-50/40">
+                  <td className="py-2.5 text-ink">
+                    {charge.description}
+                    <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                      Extra charge
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-center text-ink-soft">1</td>
+                  <td className="py-2.5 text-right text-ink-soft">
+                    {formatMoney(charge.amountMinor, invoice.currency)}
+                  </td>
+                  <td className="py-2.5 text-right font-medium text-ink">
+                    {formatMoney(charge.amountMinor, invoice.currency)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
@@ -252,8 +381,30 @@ export default function InvoiceDetailPage() {
                 <span>Subtotal</span>
                 <span>{formatMoney(invoice.subtotalMinor, invoice.currency)}</span>
               </div>
+              {extraChargesTotal > 0 && (
+                <div className="flex justify-between text-ink-soft">
+                  <span>Extra charges</span>
+                  <span>+ {formatMoney(extraChargesTotal, invoice.currency)}</span>
+                </div>
+              )}
+              {(invoice.discountMinor ?? 0) > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span>
+                    Discount
+                    {invoice.discountType === "percent"
+                      ? ` (${invoice.discountValue ?? 0}%)`
+                      : ""}
+                  </span>
+                  <span>− {formatMoney(invoice.discountMinor ?? 0, invoice.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-ink-soft">
-                <span>Tax</span>
+                <span>
+                  Tax
+                  {typeof invoice.taxRatePercent === "number"
+                    ? ` (${invoice.taxRatePercent}%)`
+                    : ""}
+                </span>
                 <span>{formatMoney(invoice.taxMinor, invoice.currency)}</span>
               </div>
               <div className="flex justify-between border-t border-line pt-2 font-serif text-lg font-semibold text-burgundy-700">
@@ -279,7 +430,7 @@ export default function InvoiceDetailPage() {
       <div className="card mt-6 p-7">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-serif text-xl font-semibold text-ink">Payments</h2>
-          {canPay && due > 0 && (
+          {canPay && due > 0 && invoice.status !== "void" && (
             <button onClick={openPayModal} className="btn-primary">
               <Plus size={18} /> Record payment
             </button>
@@ -305,6 +456,8 @@ export default function InvoiceDetailPage() {
                     <p className="font-sans text-xs text-ink-faint">
                       {formatDateTime(p.createdAt)}
                       {p.reference ? ` · ${p.reference}` : ""}
+                      {p.cardLast4 ? ` · •••• ${p.cardLast4}` : ""}
+                      {p.provider ? ` · ${p.provider}` : ""}
                     </p>
                   </div>
                 </div>
@@ -324,13 +477,16 @@ export default function InvoiceDetailPage() {
           setPayModal(false);
           setShowTerminal(false);
         }}
-        title={showTerminal ? "Card payment" : "Record Payment"}
+        title={showTerminal ? "Demo online payment" : "Record Payment"}
       >
         {showTerminal ? (
-          <CardTerminal
+          <PaymentTerminal
+            method={payMethod === "cash" ? "card" : payMethod}
             amountMinor={toMinor(payAmountStr)}
             currency={invoice.currency}
-            onApproved={() => recordPayment("card", toMinor(payAmountStr))}
+            onApproved={(result) =>
+              recordPayment(payMethod, toMinor(payAmountStr), result)
+            }
             onCancel={() => setShowTerminal(false)}
           />
         ) : (
@@ -348,50 +504,35 @@ export default function InvoiceDetailPage() {
             <div>
               <span className="label-luxe">Payment method</span>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPayMethod("cash")}
-                  className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
-                    payMethod === "cash"
-                      ? "border-burgundy-400 bg-burgundy-50"
-                      : "border-line bg-surface hover:border-rosegold-300"
-                  }`}
-                >
-                  <Banknote
-                    size={22}
-                    className={
-                      payMethod === "cash" ? "text-burgundy-600" : "text-ink-faint"
-                    }
-                  />
-                  <div>
-                    <p className="font-sans text-sm font-medium text-ink">Cash</p>
-                    <p className="font-sans text-xs text-ink-faint">
-                      Record a cash payment
-                    </p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPayMethod("card")}
-                  className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
-                    payMethod === "card"
-                      ? "border-burgundy-400 bg-burgundy-50"
-                      : "border-line bg-surface hover:border-rosegold-300"
-                  }`}
-                >
-                  <CreditCard
-                    size={22}
-                    className={
-                      payMethod === "card" ? "text-burgundy-600" : "text-ink-faint"
-                    }
-                  />
-                  <div>
-                    <p className="font-sans text-sm font-medium text-ink">Card</p>
-                    <p className="font-sans text-xs text-ink-faint">
-                      Tap on the terminal
-                    </p>
-                  </div>
-                </button>
+                {PAYMENT_METHODS.map((option) => {
+                  const Icon = option.icon;
+                  const selected = payMethod === option.method;
+                  return (
+                    <button
+                      key={option.method}
+                      type="button"
+                      onClick={() => setPayMethod(option.method)}
+                      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${
+                        selected
+                          ? "border-burgundy-400 bg-burgundy-50"
+                          : "border-line bg-surface hover:border-rosegold-300"
+                      }`}
+                    >
+                      <Icon
+                        size={22}
+                        className={selected ? "text-burgundy-600" : "text-ink-faint"}
+                      />
+                      <div>
+                        <p className="font-sans text-sm font-medium text-ink">
+                          {option.label}
+                        </p>
+                        <p className="font-sans text-xs text-ink-faint">
+                          {option.hint}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -409,9 +550,9 @@ export default function InvoiceDetailPage() {
                 disabled={saving}
                 className="btn-primary"
               >
-                {payMethod === "card" ? (
+                {payMethod !== "cash" ? (
                   <>
-                    <CreditCard size={17} /> Continue to terminal
+                    <CreditCard size={17} /> Continue to demo
                   </>
                 ) : saving ? (
                   "Saving…"

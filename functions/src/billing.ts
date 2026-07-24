@@ -9,7 +9,7 @@
 
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { Branch, JobCard, JobCardLine, Role } from "./types";
+import { Branch, JobCard, JobCardLine, Part, Role } from "./types";
 import { writeAudit } from "./audit";
 
 export const generateInvoice = onCall(async (request) => {
@@ -61,6 +61,16 @@ export const generateInvoice = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Branch settings missing.");
     }
     const branch = branchSnap.data() as Branch;
+    if (
+      !Number.isFinite(branch.taxRatePercent) ||
+      branch.taxRatePercent < 0 ||
+      branch.taxRatePercent > 100
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Set a valid branch tax rate between 0% and 100% before invoicing."
+      );
+    }
 
     // Read all line items for this job card.
     const linesSnap = await tx.get(
@@ -73,23 +83,88 @@ export const generateInvoice = onCall(async (request) => {
       );
     }
 
+    // Freeze part costs as well as selling prices so profit reports remain
+    // historically correct if catalogue costs change later.
+    const jobLines = linesSnap.docs
+      .map((d) => d.data() as JobCardLine)
+      .filter((line) => !line.archived);
+    if (jobLines.length === 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Cannot invoice a job card with no active line items."
+      );
+    }
+    const partIds = Array.from(
+      new Set(
+        jobLines
+          .filter((line) => line.kind === "part" && line.partId)
+          .map((line) => line.partId as string)
+      )
+    );
+    const partSnaps = await Promise.all(
+      partIds.map((partId) => tx.get(db.collection("parts").doc(partId)))
+    );
+    const partCosts = new Map<string, number>();
+    partSnaps.forEach((snap) => {
+      if (snap.exists) {
+        partCosts.set(snap.id, (snap.data() as Part).costPriceMinor ?? 0);
+      }
+    });
+
     // Freeze line snapshot + compute totals from stored (historical) prices.
     let subtotalMinor = 0;
-    const lines = linesSnap.docs.map((d) => {
-      const l = d.data() as JobCardLine;
+    const lines = jobLines.map((l) => {
       subtotalMinor += l.lineTotalMinor;
+      const costPriceMinor = l.partId ? partCosts.get(l.partId) : undefined;
       return {
         description: l.description,
         quantity: l.quantity,
         unitPriceMinor: l.unitPriceMinor,
         lineTotalMinor: l.lineTotalMinor,
+        kind: l.kind,
+        ...(l.partId ? { partId: l.partId } : {}),
+        ...(costPriceMinor !== undefined ? { costPriceMinor } : {}),
       };
     });
 
-    const taxMinor = Math.round(
-      subtotalMinor * (branch.taxRatePercent / 100)
+    const taxRatePercent =
+      typeof job.taxRatePercent === "number" &&
+      Number.isFinite(job.taxRatePercent) &&
+      job.taxRatePercent >= 0 &&
+      job.taxRatePercent <= 100
+        ? job.taxRatePercent
+        : branch.taxRatePercent;
+    const extraCharges = Array.isArray(job.extraCharges)
+      ? job.extraCharges
+          .filter(
+            (charge) =>
+              typeof charge?.description === "string" &&
+              Number.isFinite(charge?.amountMinor) &&
+              charge.amountMinor > 0
+          )
+          .map((charge) => ({
+            description: charge.description.trim(),
+            amountMinor: Math.round(charge.amountMinor),
+          }))
+      : [];
+    const extraChargesTotal = extraCharges.reduce(
+      (total, charge) => total + charge.amountMinor,
+      0
     );
-    const totalMinor = subtotalMinor + taxMinor;
+    const adjustedSubtotal = subtotalMinor + extraChargesTotal;
+    const discountType = job.discountType === "percent" ? "percent" : "fixed";
+    const rawDiscount = Number.isFinite(job.discountValue) && job.discountValue! > 0
+      ? job.discountValue!
+      : 0;
+    const discountMinor = Math.min(
+      adjustedSubtotal,
+      discountType === "percent"
+        ? Math.round(adjustedSubtotal * (Math.min(100, rawDiscount) / 100))
+        : Math.round(rawDiscount)
+    );
+    const taxableSubtotal = adjustedSubtotal - discountMinor;
+    const taxMinor = Math.round(taxableSubtotal * (taxRatePercent / 100));
+    const totalMinor = taxableSubtotal + taxMinor;
 
     const invoiceRef = db.collection("invoices").doc();
     tx.set(invoiceRef, {
@@ -102,6 +177,11 @@ export const generateInvoice = onCall(async (request) => {
       taxMinor,
       totalMinor,
       amountPaidMinor: 0,
+      taxRatePercent,
+      extraCharges,
+      discountType,
+      discountValue: discountType === "percent" ? Math.min(100, rawDiscount) : Math.round(rawDiscount),
+      discountMinor,
       lines,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

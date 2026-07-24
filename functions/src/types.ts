@@ -109,16 +109,21 @@ export interface JobCard extends BaseDoc {
   subtotalMinor: number;
   taxMinor: number;
   totalMinor: number;
-
-  invoiceId?: string | null;
+  invoiceId?: string | null; // set once an invoice is generated
 
   /**
    * The next planned service date.
-   *
-   * This should be populated when the job is completed/delivered
-   * so the service-reminder notification can be scheduled.
+   * Populated when the job is completed/delivered so the service-reminder
+   * notification can be scheduled.
    */
   nextServiceDate?: Timestamp | null;
+
+  /** Pricing choices made on the job card before its invoice is generated. */
+  taxRatePercent?: number;
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  discountValue?: number;
+  discountMinor?: number;
 }
 
 /** A single labor or parts line on a job card. */
@@ -166,6 +171,13 @@ export type InvoiceStatus =
   | "paid"
   | "void";
 
+export type DiscountType = "percent" | "fixed";
+
+export interface ExtraCharge {
+  description: string;
+  amountMinor: number;
+}
+
 export interface Invoice extends BaseDoc {
   jobCardId: string;
   customerId: string;
@@ -176,12 +188,21 @@ export interface Invoice extends BaseDoc {
   taxMinor: number;
   totalMinor: number;
   amountPaidMinor: number;
-
+  taxRatePercent?: number;
+  extraCharges?: ExtraCharge[];
+  discountType?: DiscountType;
+  /** Percentage points for percent discounts; minor units for fixed discounts. */
+  discountValue?: number;
+  discountMinor?: number;
+  // Snapshot of the lines at invoice time so history is frozen.
   lines: Array<{
     description: string;
     quantity: number;
     unitPriceMinor: number;
     lineTotalMinor: number;
+    kind?: "labor" | "part";
+    partId?: string | null;
+    costPriceMinor?: number;
   }>;
 }
 
@@ -196,6 +217,8 @@ export interface Payment extends BaseDoc {
     | "bank_transfer"
     | "wallet";
   reference?: string;
+  cardLast4?: string;
+  provider?: string;
 }
 
 // ---- Audit log -------------------------------------------------------------
@@ -269,9 +292,6 @@ export interface Attendance {
    */
   note?: string;
 
-<<<<<<< Updated upstream
-  updatedAt?: FirebaseFirestore.Timestamp;
-=======
   createdAt?: Timestamp;
 
   updatedAt?: Timestamp;
@@ -392,5 +412,4 @@ export interface ServiceReminderDocument {
 
   createdAt: Timestamp;
   updatedAt: Timestamp;
->>>>>>> Stashed changes
 }

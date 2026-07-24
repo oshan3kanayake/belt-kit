@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Receipt, FileText, TrendingUp, Wallet, TrendingDown, PiggyBank } from "lucide-react";
 import { useCollection } from "@/lib/useCollection";
-import { Invoice, Customer, Part, InvoiceStatus } from "@/lib/models";
+import { Invoice, Customer, Part, Payment, InvoiceStatus } from "@/lib/models";
 import { formatMoney, formatDate } from "@/lib/format";
 import {
   PageHeader,
@@ -41,6 +41,7 @@ export default function BillingPage() {
   const { data: invoices, loading, error } = useCollection<Invoice>("invoices");
   const { data: customers } = useCollection<Customer>("customers");
   const { data: parts } = useCollection<Part>("parts");
+  const { data: payments } = useCollection<Payment>("payments");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -70,7 +71,18 @@ export default function BillingPage() {
   const outstanding = invoices
     .filter((i) => i.status !== "paid" && i.status !== "void")
     .reduce((s, i) => s + (i.totalMinor - i.amountPaidMinor), 0);
-  const collectedMTD = invoices.reduce((s, i) => s + i.amountPaidMinor, 0);
+  const paymentInvoiceIds = useMemo(
+    () => new Set(payments.map((payment) => payment.invoiceId)),
+    [payments]
+  );
+  const collectedMTD = useMemo(
+    () =>
+      payments.reduce((sum, payment) => sum + (payment.amountMinor || 0), 0) +
+      invoices
+        .filter((invoice) => !paymentInvoiceIds.has(invoice.id))
+        .reduce((sum, invoice) => sum + (invoice.amountPaidMinor || 0), 0),
+    [invoices, paymentInvoiceIds, payments]
+  );
   const unpaidCount = invoices.filter(
     (i) => i.status !== "paid" && i.status !== "void"
   ).length;
@@ -87,8 +99,10 @@ export default function BillingPage() {
       .filter((i) => i.status !== "void")
       .forEach((inv) => {
         (inv.lines || []).forEach((l) => {
-          const cost = costByName.get((l.description || "").toLowerCase().trim());
-          if (cost) exp += cost * (l.quantity || 1);
+          const cost =
+            l.costPriceMinor ??
+            costByName.get((l.description || "").toLowerCase().trim());
+          if (cost !== undefined) exp += cost * (l.quantity || 1);
         });
       });
     return { expenses: exp, profit: collectedMTD - exp };
@@ -107,14 +121,23 @@ export default function BillingPage() {
       });
     }
     const idx = new Map(days.map((d, i) => [d.key, i]));
-    invoices.forEach((inv) => {
-      const t = inv.createdAt?.toDate?.();
+    payments.forEach((payment) => {
+      const t = payment.createdAt?.toDate?.();
       if (!t) return;
       const k = t.toISOString().slice(0, 10);
-      if (idx.has(k)) days[idx.get(k)!].value += inv.amountPaidMinor / 100;
+      if (idx.has(k)) days[idx.get(k)!].value += payment.amountMinor / 100;
+    });
+    // Invoices created before individual payment records existed still appear
+    // once, using their invoice date as a documented legacy fallback.
+    invoices.forEach((invoice) => {
+      if (paymentInvoiceIds.has(invoice.id) || !invoice.amountPaidMinor) return;
+      const t = invoice.createdAt?.toDate?.();
+      if (!t) return;
+      const k = t.toISOString().slice(0, 10);
+      if (idx.has(k)) days[idx.get(k)!].value += invoice.amountPaidMinor / 100;
     });
     return days;
-  }, [invoices]);
+  }, [invoices, paymentInvoiceIds, payments]);
 
   const columns: Column<Invoice & { id: string }>[] = [
     {
