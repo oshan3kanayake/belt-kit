@@ -44,6 +44,8 @@ import {
   ConfirmDialog,
   useToast,
 } from "@/components/ui";
+import { VehicleCheckIn } from "@/components/VehicleCheckIn";
+import { JobPhotos } from "@/components/JobPhotos";
 
 const BRANCH_TAX_PERCENT = 18;
 
@@ -607,6 +609,12 @@ const disabled = readOnly || !(canEditJob || isTech);           return (
     </Field>
   </div>
 )}
+
+      {/* Vehicle Check-in Inspection */}
+      <VehicleCheckIn job={job} jobId={id} canEdit={canEditLines} />
+
+      {/* Before & After Photos */}
+      <JobPhotos job={job} jobId={id} canEdit={canEditLines} />
 
       {/* Assigned technicians */}
       <div className="card p-6">

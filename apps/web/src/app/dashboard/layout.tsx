@@ -22,6 +22,7 @@ import {
   Zap,
   ChevronRight,
   CalendarCheck2,
+  Kanban,
 } from "lucide-react";
 import { useAuth, Role } from "@/lib/auth-context";
 import { ROLE_META } from "@/lib/roles";
@@ -37,39 +38,18 @@ type NavItem = {
 };
 
 const CORE_NAV: NavItem[] = [
-  { href: "/dashboard",            label: "Overview",      icon: LayoutDashboard, roles: ["owner","manager","advisor","technician","accountant"] },
-  { href: "/dashboard/job-cards",  label: "Job Cards",     icon: ClipboardList,   roles: ["owner","manager","advisor","technician","accountant"] },
-  {
-  href: "/dashboard/job-cards/finished-jobs",
-  label: "Finished Jobs",
-  icon: ClipboardCheck,
-  roles: [
-    "owner",
-    "manager",
-    "advisor",
-    "technician",
-    "accountant"
-  ]
-},
-{
-  href: "/dashboard/services",
-  label: "Services",
-  icon: ClipboardCheck,
-  roles: [
-    "owner",
-    "manager",
-    "advisor",
-    "technician",
-    "accountant"
-  ]
-},
-  { href: "/dashboard/customers",  label: "Customers",     icon: Users,           roles: ["owner","manager","advisor","accountant"] },
-  { href: "/dashboard/vehicles",   label: "Vehicles",      icon: Car,             roles: ["owner","manager","advisor","accountant"] },
-  { href: "/dashboard/inventory",  label: "Inventory",     icon: Package,         roles: ["owner","manager","advisor"] },
-  { href: "/dashboard/billing",    label: "Billing",       icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
-  { href: "/dashboard/employees",  label: "Employees",     icon: UserCog,         roles: ["owner","manager"] },
+  { href: "/dashboard",            label: "Overview",       icon: LayoutDashboard, roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/job-cards",  label: "Job Cards",      icon: ClipboardList,   roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/job-cards/finished-jobs", label: "Finished Jobs", icon: ClipboardCheck, roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/services",   label: "Services",       icon: ClipboardCheck,  roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/workshop",   label: "Workshop Board", icon: Kanban,          roles: ["owner","manager","advisor","technician","accountant"] },
+  { href: "/dashboard/customers",  label: "Customers",      icon: Users,           roles: ["owner","manager","advisor","accountant"] },
+  { href: "/dashboard/vehicles",   label: "Vehicles",       icon: Car,             roles: ["owner","manager","advisor","accountant"] },
+  { href: "/dashboard/inventory",  label: "Inventory",      icon: Package,         roles: ["owner","manager","advisor"] },
+  { href: "/dashboard/billing",    label: "Billing",        icon: Receipt,         roles: ["owner","manager","advisor","accountant"] },
+  { href: "/dashboard/employees",  label: "Employees",      icon: UserCog,         roles: ["owner","manager"] },
   { href: "/dashboard/employees/attendance", label: "Attendance", icon: CalendarCheck2, roles: ["owner","manager"] },
-  { href: "/dashboard/users",      label: "Users & Roles", icon: UserCog,         roles: ["owner","manager"] },
+  { href: "/dashboard/users",      label: "Users & Roles",  icon: UserCog,         roles: ["owner","manager"] },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

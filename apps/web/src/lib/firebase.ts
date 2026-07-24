@@ -21,6 +21,7 @@ import {
   Firestore,
 } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -53,6 +54,7 @@ export const db = _db;
 
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
+export const storage = getStorage(app);
 
 // Wire to the local emulator when asked (only in the browser, only once).
 const useEmulator = process.env.NEXT_PUBLIC_USE_EMULATOR === "true";

@@ -43,6 +43,7 @@ export type JobStatus =
   | "delivered";
 
 export interface JobCard {
+  id?: string;
   branchId: string;
 
   customerId: string;
@@ -50,16 +51,10 @@ export interface JobCard {
 
   complaint: string;
 
-  // Part 1.2 additions
+  // Service types selected for this job.
   serviceTypeIds: string[];
 
   assignedTechnicianIds: string[];
-
-  startDate?: Timestamp | null;
-
-  promisedEndDate?: Timestamp | null;
-
-
   status: JobStatus;
 
   subtotalMinor: number;
@@ -68,12 +63,33 @@ export interface JobCard {
 
   invoiceId?: string | null;
 
+  // Scheduling / dates.
   scheduledDate?: Timestamp | null;
+  startDate?: Timestamp | null;
+  promisedEndDate?: Timestamp | null;
+  actualEndDate?: Timestamp | null;
+  completionNotes?: string;
+
+  // Vehicle check-in / inspection.
+  odometerReading?: number | null;
+  fuelLevel?: "Empty" | "Quarter" | "Half" | "Full" | string | null;
+  existingDamage?: {
+    scratches?: boolean;
+    dents?: boolean;
+    crackedGlass?: boolean;
+    notes?: string;
+  } | null;
+
+  // Before / after photos.
+  photos?: {
+    before?: string[];
+    after?: string[];
+  } | null;
+
+  delayNote?: string | null;
 
   archived?: boolean;
   createdAt?: Timestamp;
-  actualEndDate?: Timestamp;
-  completionNotes?: string;
 }
 
 export interface JobCardLine {
